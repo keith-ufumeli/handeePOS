@@ -62,7 +62,7 @@ export const errorHandler = (
     res,
     error.message || 'Server Error',
     error.statusCode || 500,
-    process.env.NODE_ENV === 'development' ? error.stack : undefined
+    process.env['NODE_ENV'] === 'development' ? error.stack : undefined
   );
 };
 

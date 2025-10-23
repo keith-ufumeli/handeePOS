@@ -30,7 +30,7 @@ export const sendError = (
   const response: ApiResponse = {
     success: false,
     message,
-    error,
+    ...(error && { error }),
   };
   res.status(statusCode).json(response);
 };

@@ -23,21 +23,21 @@ const colors = {
 winston.addColors(colors);
 
 // Define which transports the logger must use
-const transports = [
+const transports: winston.transport[] = [
   // Console transport
   new winston.transports.Console({
     format: winston.format.combine(
       winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
       winston.format.colorize({ all: true }),
       winston.format.printf(
-        (info) => `${info.timestamp} ${info.level}: ${info.message}`
+        (info) => `${info['timestamp']} ${info['level']}: ${info['message']}`
       )
     ),
   }),
 ];
 
 // Add file transport in production
-if (process.env.NODE_ENV === 'production') {
+if (process.env['NODE_ENV'] === 'production') {
   transports.push(
     new winston.transports.File({
       filename: path.join(process.cwd(), 'logs', 'error.log'),
@@ -59,7 +59,7 @@ if (process.env.NODE_ENV === 'production') {
 
 // Create the logger
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
+  level: process.env['LOG_LEVEL'] || 'info',
   levels,
   transports,
   exitOnError: false,

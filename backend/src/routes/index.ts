@@ -13,7 +13,7 @@ router.get('/health', (req, res) => {
     message: 'HandeePOS Backend is running',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: process.env.NODE_ENV
+    environment: process.env['NODE_ENV']
   });
 });
 
