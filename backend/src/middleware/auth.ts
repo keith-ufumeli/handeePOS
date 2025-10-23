@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { sendError } from '@/utils/response';
-import { TokenPayload } from '@/types';
+import authService from '@/services/authService';
+import logger from '@/utils/logger';
 
 /**
  * Authentication middleware
@@ -12,42 +11,19 @@ export const authenticate = (
   next: NextFunction
 ): void => {
   try {
-    const authHeader = req.headers.authorization;
+    const token = authService.extractTokenFromHeader(req.headers.authorization);
+    const decoded = authService.verifyAccessToken(token);
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      sendError(res, 'Access denied. No token provided.', 401);
-      return;
-    }
-
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-    
-    if (!token) {
-      sendError(res, 'Access denied. No token provided.', 401);
-      return;
-    }
-
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
-      sendError(res, 'JWT secret not configured.', 500);
-      return;
-    }
-
-    const decoded = jwt.verify(token, jwtSecret) as TokenPayload;
-    req.token = decoded;
+    // Attach user info to request
+    (req as any).user = decoded;
     
     next();
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      sendError(res, 'Invalid token.', 401);
-      return;
-    }
-    
-    if (error instanceof jwt.TokenExpiredError) {
-      sendError(res, 'Token expired.', 401);
-      return;
-    }
-    
-    sendError(res, 'Token verification failed.', 401);
+    logger.error('Authentication error:', error);
+    res.status(401).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Authentication failed'
+    });
   }
 };
 
@@ -56,18 +32,23 @@ export const authenticate = (
  */
 export const authorize = (permissions: string[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.token) {
-      sendError(res, 'Authentication required.', 401);
+    const user = (req as any).user;
+    
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
       return;
     }
 
-    const userPermissions = req.token.permissions || [];
-    const hasPermission = permissions.some(permission => 
-      userPermissions.includes(permission)
-    );
+    const hasPermission = authService.hasAnyPermission(user.permissions, permissions);
 
     if (!hasPermission) {
-      sendError(res, 'Insufficient permissions.', 403);
+      res.status(403).json({
+        success: false,
+        message: 'Insufficient permissions'
+      });
       return;
     }
 
@@ -79,20 +60,34 @@ export const authorize = (permissions: string[]) => {
  * Check if user has access to specific store
  */
 export const checkStoreAccess = (req: Request, res: Response, next: NextFunction): void => {
-  if (!req.token) {
-    sendError(res, 'Authentication required.', 401);
+  const user = (req as any).user;
+  
+  if (!user) {
+    res.status(401).json({
+      success: false,
+      message: 'Authentication required'
+    });
     return;
   }
 
-  const storeId = req.params.storeId || req.body.storeId;
+  const storeId = req.params['storeId'] || req.body['storeId'];
   
   if (!storeId) {
-    sendError(res, 'Store ID is required.', 400);
+    res.status(400).json({
+      success: false,
+      message: 'Store ID is required'
+    });
     return;
   }
 
   // Check if user has access to this store
-  // This will be implemented when we add user models
-  // For now, we'll allow access if user is authenticated
+  if (user['storeId'] !== storeId) {
+    res.status(403).json({
+      success: false,
+      message: 'Access denied to this store'
+    });
+    return;
+  }
+
   next();
 };

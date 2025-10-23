@@ -15,7 +15,7 @@
     "type-check": "tsc --noEmit",
     "migrate": "node scripts/migrate.js",
     "migrate:rollback": "node scripts/migrate-rollback.js",
-    "seed": "node scripts/seed.js",
+    "seed": "ts-node scripts/seed.ts",
     "clean": "rimraf dist"
   },
   "keywords": [

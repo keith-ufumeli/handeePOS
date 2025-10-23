@@ -1,81 +1,136 @@
-import { Request, Response, NextFunction } from 'express';
-import Joi from 'joi';
-import { sendValidationError } from '@/utils/response';
+import { body, ValidationChain } from 'express-validator';
 
 /**
- * Validation middleware factory
+ * Login validation rules
  */
-export const validate = (schema: Joi.ObjectSchema) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const { error } = schema.validate(req.body, { abortEarly: false });
-    
-    if (error) {
-      const errors: Record<string, string[]> = {};
-      
-      error.details.forEach((detail) => {
-        const key = detail.path.join('.');
-        if (!errors[key]) {
-          errors[key] = [];
-        }
-        errors[key].push(detail.message);
-      });
-      
-      sendValidationError(res, errors);
-      return;
-    }
-    
-    next();
-  };
-};
+export const validateLogin: ValidationChain[] = [
+  body('email')
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail()
+    .toLowerCase(),
+  
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters long')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number')
+];
 
 /**
- * Query validation middleware
+ * Refresh token validation rules
  */
-export const validateQuery = (schema: Joi.ObjectSchema) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const { error } = schema.validate(req.query, { abortEarly: false });
-    
-    if (error) {
-      const errors: Record<string, string[]> = {};
-      
-      error.details.forEach((detail) => {
-        const key = detail.path.join('.');
-        if (!errors[key]) {
-          errors[key] = [];
-        }
-        errors[key].push(detail.message);
-      });
-      
-      sendValidationError(res, errors);
-      return;
-    }
-    
-    next();
-  };
-};
+export const validateRefreshToken: ValidationChain[] = [
+  body('refreshToken')
+    .notEmpty()
+    .withMessage('Refresh token is required')
+    .isString()
+    .withMessage('Refresh token must be a string')
+];
 
 /**
- * Params validation middleware
+ * Change password validation rules
  */
-export const validateParams = (schema: Joi.ObjectSchema) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const { error } = schema.validate(req.params, { abortEarly: false });
-    
-    if (error) {
-      const errors: Record<string, string[]> = {};
-      
-      error.details.forEach((detail) => {
-        const key = detail.path.join('.');
-        if (!errors[key]) {
-          errors[key] = [];
-        }
-        errors[key].push(detail.message);
-      });
-      
-      sendValidationError(res, errors);
-      return;
-    }
-    
-    next();
-  };
-};
+export const validateChangePassword: ValidationChain[] = [
+  body('currentPassword')
+    .notEmpty()
+    .withMessage('Current password is required'),
+  
+  body('newPassword')
+    .isLength({ min: 6 })
+    .withMessage('New password must be at least 6 characters long')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('New password must contain at least one uppercase letter, one lowercase letter, and one number')
+    .custom((value, { req }) => {
+      if (value === req.body.currentPassword) {
+        throw new Error('New password must be different from current password');
+      }
+      return true;
+    })
+];
+
+/**
+ * User registration validation rules
+ */
+export const validateUserRegistration: ValidationChain[] = [
+  body('email')
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail()
+    .toLowerCase(),
+  
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters long')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
+  
+  body('fullName')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Full name must be between 2 and 100 characters')
+    .trim(),
+  
+  body('role')
+    .isIn(['admin', 'manager', 'cashier', 'inventory'])
+    .withMessage('Role must be one of: admin, manager, cashier, inventory'),
+  
+  body('storeId')
+    .isMongoId()
+    .withMessage('Store ID must be a valid MongoDB ObjectId'),
+  
+  body('phoneNumber')
+    .optional()
+    .isMobilePhone('any')
+    .withMessage('Please provide a valid phone number')
+];
+
+/**
+ * Store creation validation rules
+ */
+export const validateStoreCreation: ValidationChain[] = [
+  body('name')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Store name must be between 2 and 100 characters')
+    .trim(),
+  
+  body('address.street')
+    .isLength({ min: 5, max: 200 })
+    .withMessage('Street address must be between 5 and 200 characters')
+    .trim(),
+  
+  body('address.city')
+    .isLength({ min: 2, max: 50 })
+    .withMessage('City must be between 2 and 50 characters')
+    .trim(),
+  
+  body('address.country')
+    .isLength({ min: 2, max: 50 })
+    .withMessage('Country must be between 2 and 50 characters')
+    .trim(),
+  
+  body('address.postalCode')
+    .isLength({ min: 3, max: 20 })
+    .withMessage('Postal code must be between 3 and 20 characters')
+    .trim(),
+  
+  body('currency')
+    .isIn(['USD', 'EUR', 'GBP', 'ZAR', 'KES', 'NGN', 'GHS', 'ZWL'])
+    .withMessage('Currency must be one of: USD, EUR, GBP, ZAR, KES, NGN, GHS, ZWL'),
+  
+  body('timezone')
+    .isString()
+    .withMessage('Timezone must be a string')
+    .trim(),
+  
+  body('phoneNumber')
+    .optional()
+    .isMobilePhone('any')
+    .withMessage('Please provide a valid phone number'),
+  
+  body('email')
+    .optional()
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail()
+    .toLowerCase()
+];
