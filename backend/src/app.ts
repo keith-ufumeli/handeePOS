@@ -17,7 +17,7 @@ import productRoutes from '@/routes/products';
 import { errorHandler, notFound } from '@/middleware/errorHandler';
 
 // Load environment variables
-dotenv.config();
+dotenv.config({ path: '.env.local' });
 
 const app = express();
 const PORT = process.env['PORT'] || 3000;
