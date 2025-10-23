@@ -18,8 +18,9 @@ import productRoutes from '@/routes/products';
 // Import error handling middleware
 import { errorHandler, notFound } from '@/middleware/errorHandler';
 
-// Load environment variables
-dotenv.config({ path: '.env.local' });
+// Load environment variables based on NODE_ENV
+const envFile = process.env['NODE_ENV'] === 'production' ? '.env.prod' : '.env.local';
+dotenv.config({ path: envFile });
 
 const app = express();
 const PORT = process.env['PORT'] || 3000;
