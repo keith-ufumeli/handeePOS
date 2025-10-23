@@ -4,9 +4,11 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
 
 // Import database connection
 import connectDB from '@/config/database';
+import { swaggerSpec } from '@/config/swagger';
 
 // Import routes
 import indexRoutes from '@/routes/index';
@@ -43,6 +45,13 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// Swagger API Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  explorer: true,
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'HandeePOS API Documentation'
+}));
+
 // API routes
 app.use('/api', indexRoutes);
 app.use('/api/auth', authRoutes);
@@ -57,7 +66,8 @@ app.get('/', (_req, res) => {
     endpoints: {
       health: '/api/health',
       auth: '/api/auth',
-      products: '/api/products'
+      products: '/api/products',
+      docs: '/api-docs'
     }
   });
 });
@@ -78,6 +88,7 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`🚀 HandeePOS Backend running on port ${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
+      console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
       console.log(`🌍 Environment: ${process.env['NODE_ENV'] || 'development'}`);
     });
   } catch (error) {
