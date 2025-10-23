@@ -7,7 +7,7 @@ const router = Router();
 router.use(generalLimiter);
 
 // Health check route
-router.get('/health', (req, res) => {
+router.get('/health', (_req, res) => {
   res.status(200).json({
     success: true,
     message: 'HandeePOS Backend is running',
@@ -18,7 +18,7 @@ router.get('/health', (req, res) => {
 });
 
 // API info route
-router.get('/', (req, res) => {
+router.get('/', (_req, res) => {
   res.json({
     success: true,
     message: 'HandeePOS Backend API',

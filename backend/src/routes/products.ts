@@ -11,7 +11,7 @@ router.use(authenticate);
  * @desc    Get all products
  * @access  Private
  */
-router.get('/', (req, res) => {
+router.get('/', (_req, res) => {
   // TODO: Implement get products logic
   res.json({
     success: true,
@@ -28,7 +28,7 @@ router.get('/', (req, res) => {
  * @desc    Get single product
  * @access  Private
  */
-router.get('/:id', (req, res) => {
+router.get('/:id', (_req, res) => {
   // TODO: Implement get single product logic
   res.json({
     success: true,
@@ -45,7 +45,7 @@ router.get('/:id', (req, res) => {
  * @desc    Create product
  * @access  Private (Manager, Admin)
  */
-router.post('/', authorize(['products:create']), (req, res) => {
+router.post('/', authorize(['products:create']), (_req, res) => {
   // TODO: Implement create product logic
   res.json({
     success: true,
@@ -62,7 +62,7 @@ router.post('/', authorize(['products:create']), (req, res) => {
  * @desc    Update product
  * @access  Private (Manager, Admin)
  */
-router.put('/:id', authorize(['products:update']), (req, res) => {
+router.put('/:id', authorize(['products:update']), (_req, res) => {
   // TODO: Implement update product logic
   res.json({
     success: true,
@@ -79,7 +79,7 @@ router.put('/:id', authorize(['products:update']), (req, res) => {
  * @desc    Delete product
  * @access  Private (Admin)
  */
-router.delete('/:id', authorize(['products:delete']), (req, res) => {
+router.delete('/:id', authorize(['products:delete']), (_req, res) => {
   // TODO: Implement delete product logic
   res.json({
     success: true,
@@ -96,7 +96,7 @@ router.delete('/:id', authorize(['products:delete']), (req, res) => {
  * @desc    Search products
  * @access  Private
  */
-router.get('/search', (req, res) => {
+router.get('/search', (_req, res) => {
   // TODO: Implement search products logic
   res.json({
     success: true,
@@ -113,7 +113,7 @@ router.get('/search', (req, res) => {
  * @desc    Bulk import products
  * @access  Private (Manager, Admin)
  */
-router.post('/bulk-import', authorize(['products:import']), (req, res) => {
+router.post('/bulk-import', authorize(['products:import']), (_req, res) => {
   // TODO: Implement bulk import logic
   res.json({
     success: true,
@@ -130,7 +130,7 @@ router.post('/bulk-import', authorize(['products:import']), (req, res) => {
  * @desc    Get low stock products
  * @access  Private
  */
-router.get('/low-stock', (req, res) => {
+router.get('/low-stock', (_req, res) => {
   // TODO: Implement low stock logic
   res.json({
     success: true,

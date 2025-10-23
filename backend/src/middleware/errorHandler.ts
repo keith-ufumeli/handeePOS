@@ -14,7 +14,7 @@ export const errorHandler = (
   err: AppError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void => {
   let error = { ...err };
   error.message = err.message;
@@ -69,8 +69,8 @@ export const errorHandler = (
 /**
  * Handle 404 errors
  */
-export const notFound = (req: Request, res: Response, next: NextFunction): void => {
-  const error = new Error(`Not found - ${req.originalUrl}`) as AppError;
+export const notFound = (_req: Request, _res: Response, next: NextFunction): void => {
+  const error = new Error(`Not found - ${_req.originalUrl}`) as AppError;
   error.statusCode = 404;
   next(error);
 };
