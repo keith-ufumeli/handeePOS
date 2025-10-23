@@ -8,8 +8,9 @@
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 
-// Load environment variables
-dotenv.config();
+// Load environment variables based on NODE_ENV
+const envFile = process.env.NODE_ENV === 'production' ? '.env.prod' : '.env.local';
+dotenv.config({ path: envFile });
 
 async function rollbackMigrations() {
   try {
