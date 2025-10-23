@@ -5,12 +5,13 @@ import Store from '../src/models/Store';
 import authService from '../src/services/authService';
 
 // Load environment variables
-dotenv.config();
+const envFile = process.env['NODE_ENV'] === 'production' ? '.env.prod' : '.env.local';
+dotenv.config({ path: envFile });
 
 const seedData = async () => {
   try {
     // Connect to MongoDB
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/handeepos';
+    const mongoURI = process.env['MONGODB_URI'] || 'mongodb://localhost:27017/handeepos';
     await mongoose.connect(mongoURI);
     console.log('Connected to MongoDB');
 
