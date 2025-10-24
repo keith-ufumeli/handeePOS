@@ -24,7 +24,7 @@ const envFile = process.env['NODE_ENV'] === 'production' ? '.env.prod' : '.env.l
 dotenv.config({ path: envFile });
 
 const app = express();
-const PORT = process.env['PORT'] || 3000;
+const PORT = parseInt(process.env['PORT'] || '3000', 10);
 
 // Middleware
 app.use(helmet());
@@ -89,7 +89,7 @@ const startServer = async () => {
     await connectDB();
     
     // Start server
-    app.listen(PORT, () => {
+    app.listen(PORT, 'localhost', () => {
       console.log(`🚀 HandeePOS Backend running on port ${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
