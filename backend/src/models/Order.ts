@@ -194,7 +194,7 @@ OrderSchema.index({ storeId: 1, createdAt: -1 });
 OrderSchema.index({ storeId: 1, status: 1 });
 OrderSchema.index({ storeId: 1, cashierId: 1 });
 OrderSchema.index({ storeId: 1, syncStatus: 1 });
-OrderSchema.index({ orderNumber: 1 });
+// Note: orderNumber already has unique: true which creates an index automatically
 
 // Pre-save middleware to generate order number
 OrderSchema.pre('save', async function(next) {

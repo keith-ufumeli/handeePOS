@@ -4,6 +4,7 @@ import Order from "../database/models/Order";
 import { Q } from "@nozbe/watermelondb";
 import SyncService from "../services/syncService";
 import { CartItem } from "./cartStore";
+import { API_CONFIG } from "../config/api";
 
 export interface OrderFilters {
   status?: string;
@@ -34,7 +35,7 @@ export interface OrderState {
 }
 
 // Create sync service instance
-const syncService = new SyncService("http://localhost:3000"); // TODO: Get from config
+const syncService = new SyncService(API_CONFIG.BASE_URL);
 
 export const useOrderStore = create<OrderState>((set, get) => ({
   orders: [],

@@ -4,6 +4,7 @@ import Product from '../database/models/Product';
 import Category from '../database/models/Category';
 import { Q } from '@nozbe/watermelondb';
 import SyncService from '../services/syncService';
+import { API_CONFIG } from '../config/api';
 
 export interface ProductFilters {
   search?: string;
@@ -42,7 +43,7 @@ export interface ProductState {
 }
 
 // Create sync service instance
-const syncService = new SyncService('http://localhost:3000'); // TODO: Get from config
+const syncService = new SyncService(API_CONFIG.BASE_URL);
 
 export const useProductStore = create<ProductState>((set, get) => ({
   products: [],
