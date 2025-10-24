@@ -14,6 +14,7 @@ import { swaggerSpec } from '@/config/swagger';
 import indexRoutes from '@/routes/index';
 import authRoutes from '@/routes/auth';
 import productRoutes from '@/routes/products';
+import orderRoutes from '@/routes/orders';
 
 // Import error handling middleware
 import { errorHandler, notFound } from '@/middleware/errorHandler';
@@ -57,6 +58,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 app.use('/api', indexRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Root route
 app.get('/', (_req, res) => {
@@ -68,6 +70,7 @@ app.get('/', (_req, res) => {
       health: '/api/health',
       auth: '/api/auth',
       products: '/api/products',
+      orders: '/api/orders',
       docs: '/api-docs'
     }
   });
