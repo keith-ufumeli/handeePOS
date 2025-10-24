@@ -16,14 +16,14 @@ router.use(authenticate);
  * @desc    Get all products with search, filter, and pagination
  * @access  Private
  */
-router.get('/', ProductController.getProducts);
+router.get('/', ProductController.getProducts as any);
 
 /**
  * @route   GET /api/products/low-stock
  * @desc    Get low stock products
  * @access  Private
  */
-router.get('/low-stock', ProductController.getLowStockProducts);
+router.get('/low-stock', ProductController.getLowStockProducts as any);
 
 /**
  * @route   GET /api/products/search
@@ -35,7 +35,7 @@ router.get('/search',
     query('barcode').notEmpty().withMessage('Barcode is required')
   ],
   validateRequest,
-  ProductController.searchByBarcode
+  ProductController.searchByBarcode as any
 );
 
 /**
@@ -48,7 +48,7 @@ router.get('/:id',
     param('id').isMongoId().withMessage('Invalid product ID')
   ],
   validateRequest,
-  ProductController.getProduct
+  ProductController.getProduct as any
 );
 
 /**
@@ -68,7 +68,7 @@ router.post('/',
     body('lowStockThreshold').isNumeric().withMessage('Low stock threshold must be a number')
   ],
   validateRequest,
-  ProductController.createProduct
+  ProductController.createProduct as any
 );
 
 /**
@@ -82,7 +82,7 @@ router.put('/:id',
     param('id').isMongoId().withMessage('Invalid product ID')
   ],
   validateRequest,
-  ProductController.updateProduct
+  ProductController.updateProduct as any
 );
 
 /**
@@ -96,7 +96,7 @@ router.delete('/:id',
     param('id').isMongoId().withMessage('Invalid product ID')
   ],
   validateRequest,
-  ProductController.deleteProduct
+  ProductController.deleteProduct as any
 );
 
 /**
@@ -112,7 +112,7 @@ router.put('/:id/stock',
     body('reason').optional().isString().withMessage('Reason must be a string')
   ],
   validateRequest,
-  ProductController.updateStock
+  ProductController.updateStock as any
 );
 
 // Category routes
@@ -121,7 +121,7 @@ router.put('/:id/stock',
  * @desc    Get all categories
  * @access  Private
  */
-router.get('/categories', CategoryController.getCategories);
+router.get('/categories', CategoryController.getCategories as any);
 
 /**
  * @route   GET /api/products/categories/:id
@@ -133,7 +133,7 @@ router.get('/categories/:id',
     param('id').isMongoId().withMessage('Invalid category ID')
   ],
   validateRequest,
-  CategoryController.getCategory
+  CategoryController.getCategory as any
 );
 
 /**
@@ -148,7 +148,7 @@ router.post('/categories',
     body('description').optional().isString().withMessage('Description must be a string')
   ],
   validateRequest,
-  CategoryController.createCategory
+  CategoryController.createCategory as any
 );
 
 /**
@@ -162,7 +162,7 @@ router.put('/categories/:id',
     param('id').isMongoId().withMessage('Invalid category ID')
   ],
   validateRequest,
-  CategoryController.updateCategory
+  CategoryController.updateCategory as any
 );
 
 /**
@@ -176,7 +176,7 @@ router.delete('/categories/:id',
     param('id').isMongoId().withMessage('Invalid category ID')
   ],
   validateRequest,
-  CategoryController.deleteCategory
+  CategoryController.deleteCategory as any
 );
 
 export default router;

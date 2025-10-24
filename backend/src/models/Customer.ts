@@ -145,7 +145,7 @@ CustomerSchema.virtual('averageOrderValue').get(function() {
 });
 
 // Static method to search customers
-CustomerSchema.statics.searchCustomers = function(storeId: string, searchTerm: string) {
+CustomerSchema.statics['searchCustomers'] = function(storeId: string, searchTerm: string) {
   const query: any = {
     storeId,
     isActive: true
@@ -163,7 +163,7 @@ CustomerSchema.statics.searchCustomers = function(storeId: string, searchTerm: s
 };
 
 // Static method to get customer stats
-CustomerSchema.statics.getCustomerStats = function(storeId: string) {
+CustomerSchema.statics['getCustomerStats'] = function(storeId: string) {
   return this.aggregate([
     { $match: { storeId: new mongoose.Types.ObjectId(storeId), isActive: true } },
     {
@@ -181,7 +181,7 @@ CustomerSchema.statics.getCustomerStats = function(storeId: string) {
 };
 
 // Static method to get tier breakdown
-CustomerSchema.statics.getTierBreakdown = function(storeId: string) {
+CustomerSchema.statics['getTierBreakdown'] = function(storeId: string) {
   return this.aggregate([
     { $match: { storeId: new mongoose.Types.ObjectId(storeId), isActive: true } },
     {

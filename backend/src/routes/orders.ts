@@ -16,21 +16,21 @@ router.use(authenticate);
  * @desc    Get all orders with filters and pagination
  * @access  Private
  */
-router.get('/', OrderController.getOrders);
+router.get('/', OrderController.getOrders as any);
 
 /**
  * @route   GET /api/orders/stats
  * @desc    Get order statistics
  * @access  Private
  */
-router.get('/stats', OrderController.getOrderStats);
+router.get('/stats', OrderController.getOrderStats as any);
 
 /**
  * @route   GET /api/orders/payment-breakdown
  * @desc    Get payment method breakdown
  * @access  Private
  */
-router.get('/payment-breakdown', OrderController.getPaymentBreakdown);
+router.get('/payment-breakdown', OrderController.getPaymentBreakdown as any);
 
 /**
  * @route   GET /api/orders/:id
@@ -42,7 +42,7 @@ router.get('/:id',
     param('id').isMongoId().withMessage('Invalid order ID')
   ],
   validateRequest,
-  OrderController.getOrder
+  OrderController.getOrder as any
 );
 
 /**
@@ -68,7 +68,7 @@ router.post('/',
     body('deviceId').optional().isString().withMessage('Device ID must be a string')
   ],
   validateRequest,
-  OrderController.createOrder
+  OrderController.createOrder as any
 );
 
 /**
@@ -83,7 +83,7 @@ router.put('/:id/status',
     body('status').isIn(['pending', 'completed', 'cancelled', 'refunded']).withMessage('Invalid status')
   ],
   validateRequest,
-  OrderController.updateOrderStatus
+  OrderController.updateOrderStatus as any
 );
 
 /**
@@ -97,7 +97,7 @@ router.delete('/:id',
     param('id').isMongoId().withMessage('Invalid order ID')
   ],
   validateRequest,
-  OrderController.cancelOrder
+  OrderController.cancelOrder as any
 );
 
 // Customer routes
@@ -106,7 +106,7 @@ router.delete('/:id',
  * @desc    Get all customers
  * @access  Private
  */
-router.get('/customers', CustomerController.getCustomers);
+router.get('/customers', CustomerController.getCustomers as any);
 
 /**
  * @route   GET /api/orders/customers/search
@@ -118,7 +118,7 @@ router.get('/customers/search',
     query('query').notEmpty().withMessage('Search query is required')
   ],
   validateRequest,
-  CustomerController.searchCustomers
+  CustomerController.searchCustomers as any
 );
 
 /**
@@ -126,7 +126,7 @@ router.get('/customers/search',
  * @desc    Get customer statistics
  * @access  Private
  */
-router.get('/customers/stats', CustomerController.getCustomerStats);
+router.get('/customers/stats', CustomerController.getCustomerStats as any);
 
 /**
  * @route   GET /api/orders/customers/:id
@@ -138,7 +138,7 @@ router.get('/customers/:id',
     param('id').isMongoId().withMessage('Invalid customer ID')
   ],
   validateRequest,
-  CustomerController.getCustomer
+  CustomerController.getCustomer as any
 );
 
 /**
@@ -159,7 +159,7 @@ router.post('/customers',
     body('notes').optional().isString().withMessage('Notes must be a string')
   ],
   validateRequest,
-  CustomerController.createCustomer
+  CustomerController.createCustomer as any
 );
 
 /**
@@ -173,7 +173,7 @@ router.put('/customers/:id',
     param('id').isMongoId().withMessage('Invalid customer ID')
   ],
   validateRequest,
-  CustomerController.updateCustomer
+  CustomerController.updateCustomer as any
 );
 
 /**
@@ -187,7 +187,7 @@ router.delete('/customers/:id',
     param('id').isMongoId().withMessage('Invalid customer ID')
   ],
   validateRequest,
-  CustomerController.deleteCustomer
+  CustomerController.deleteCustomer as any
 );
 
 /**
@@ -203,7 +203,7 @@ router.put('/customers/:id/loyalty',
     body('operation').optional().isIn(['add', 'subtract']).withMessage('Operation must be add or subtract')
   ],
   validateRequest,
-  CustomerController.updateLoyaltyPoints
+  CustomerController.updateLoyaltyPoints as any
 );
 
 export default router;

@@ -202,10 +202,11 @@ OrderSchema.pre('save', async function(next) {
     const today = new Date();
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
     
-    // Find the last order for today
-    const lastOrder = await this.constructor.findOne({
-      orderNumber: { $regex: `^ORD-${dateStr}-` }
-    }).sort({ orderNumber: -1 });
+        // Find the last order for today
+        const OrderModel = mongoose.model('Order');
+        const lastOrder = await OrderModel.findOne({
+          orderNumber: { $regex: `^ORD-${dateStr}-` }
+        }).sort({ orderNumber: -1 });
 
     let sequence = 1;
     if (lastOrder) {
@@ -239,21 +240,26 @@ OrderSchema.pre('save', function(next) {
 
 // Virtual for payment total
 OrderSchema.virtual('paymentTotal').get(function() {
-  return this.payments.reduce((sum, payment) => sum + payment.amount, 0);
+  if (!this.payments || !Array.isArray(this.payments)) return 0;
+  return this.payments.reduce((sum: number, payment: IPaymentMethod) => sum + payment.amount, 0);
 });
 
 // Virtual for is fully paid
 OrderSchema.virtual('isFullyPaid').get(function() {
-  return this.paymentTotal >= this.total;
+  if (!this.payments || !Array.isArray(this.payments)) return false;
+  const paymentTotal = this.payments.reduce((sum: number, payment: IPaymentMethod) => sum + payment.amount, 0);
+  return paymentTotal >= this.total;
 });
 
 // Virtual for remaining balance
 OrderSchema.virtual('remainingBalance').get(function() {
-  return Math.max(0, this.total - this.paymentTotal);
+  if (!this.payments || !Array.isArray(this.payments)) return this.total;
+  const paymentTotal = this.payments.reduce((sum: number, payment: IPaymentMethod) => sum + payment.amount, 0);
+  return Math.max(0, this.total - paymentTotal);
 });
 
 // Static method to get daily stats
-OrderSchema.statics.getDailyStats = function(storeId: string, date: Date) {
+OrderSchema.statics['getDailyStats'] = function(storeId: string, date: Date) {
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
   
@@ -282,7 +288,7 @@ OrderSchema.statics.getDailyStats = function(storeId: string, date: Date) {
 };
 
 // Static method to get payment method breakdown
-OrderSchema.statics.getPaymentBreakdown = function(storeId: string, startDate: Date, endDate: Date) {
+OrderSchema.statics['getPaymentBreakdown'] = function(storeId: string, startDate: Date, endDate: Date) {
   return this.aggregate([
     {
       $match: {

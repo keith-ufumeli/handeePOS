@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Order, { IOrder } from '@/models/Order';
+import Order from '@/models/Order';
 import Product from '@/models/Product';
 import Customer from '@/models/Customer';
 import { sendSuccess, sendError } from '@/utils/response';
@@ -258,7 +258,7 @@ export class OrderController {
       }
 
       const targetDate = date ? new Date(date as string) : new Date();
-      const stats = await Order.getDailyStats(storeId, targetDate);
+      const stats = await (Order as any)['getDailyStats'](storeId, targetDate);
 
       sendSuccess(res, stats[0] || {
         totalOrders: 0,
@@ -292,7 +292,7 @@ export class OrderController {
       const end = endDate ? new Date(endDate as string) : new Date();
       end.setHours(23, 59, 59, 999);
 
-      const breakdown = await Order.getPaymentBreakdown(storeId, start, end);
+      const breakdown = await (Order as any)['getPaymentBreakdown'](storeId, start, end);
 
       sendSuccess(res, breakdown);
     } catch (error) {

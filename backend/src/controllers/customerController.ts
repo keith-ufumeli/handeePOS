@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Customer, { ICustomer } from '@/models/Customer';
+import Customer from '@/models/Customer';
 import { sendSuccess, sendError } from '@/utils/response';
 import logger from '@/utils/logger';
 import { TokenPayload } from '@/services/authService';
@@ -211,7 +211,7 @@ export class CustomerController {
         return;
       }
 
-      const customers = await Customer.searchCustomers(storeId, query as string);
+      const customers = await (Customer as any)['searchCustomers'](storeId, query as string);
 
       sendSuccess(res, customers);
     } catch (error) {
@@ -233,8 +233,8 @@ export class CustomerController {
       }
 
       const [stats, tierBreakdown] = await Promise.all([
-        Customer.getCustomerStats(storeId),
-        Customer.getTierBreakdown(storeId)
+        (Customer as any)['getCustomerStats'](storeId),
+        (Customer as any)['getTierBreakdown'](storeId)
       ]);
 
       sendSuccess(res, {
