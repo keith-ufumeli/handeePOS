@@ -9,8 +9,9 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useProductStore } from '@/stores/productStore';
-import Product from '@/database/models/Product';
+import { Ionicons } from '@expo/vector-icons';
+import { useProductStore } from '../../src/stores/productStore';
+import Product from '../../src/database/models/Product';
 
 export default function ProductDetailScreen() {
   const router = useRouter();
@@ -71,7 +72,7 @@ export default function ProductDetailScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Update',
-          onPress: async (stockQuantity) => {
+          onPress: async (stockQuantity: string | undefined) => {
             if (stockQuantity && !isNaN(Number(stockQuantity))) {
               try {
                 await updateProduct(id, {
@@ -79,7 +80,7 @@ export default function ProductDetailScreen() {
                 });
                 await loadProduct();
                 Alert.alert('Success', 'Stock updated successfully');
-              } catch (error) {
+              } catch  {
                 Alert.alert('Error', 'Failed to update stock');
               }
             } else {
@@ -184,7 +185,10 @@ export default function ProductDetailScreen() {
 
           {product.isLowStock && (
             <View style={styles.lowStockWarning}>
-              <Text style={styles.lowStockText}>⚠️ Low Stock Alert</Text>
+              <View style={styles.lowStockContainer}>
+                <Ionicons name="warning" size={16} color="#f59e0b" />
+                <Text style={styles.lowStockText}>Low Stock Alert</Text>
+              </View>
             </View>
           )}
 
@@ -200,10 +204,24 @@ export default function ProductDetailScreen() {
 
           <View style={styles.productRow}>
             <Text style={styles.label}>Sync Status:</Text>
-            <Text style={styles.syncStatus}>
-              {product.syncStatus === 'synced' ? '✅ Synced' : 
-               product.syncStatus === 'pending' ? '⏳ Pending' : '❌ Failed'}
-            </Text>
+            <View style={styles.syncStatusContainer}>
+              {product.syncStatusValue === 'synced' ? (
+                <View style={styles.syncStatusRow}>
+                  <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+                  <Text style={styles.syncStatusText}>Synced</Text>
+                </View>
+              ) : product.syncStatusValue === 'pending' ? (
+                <View style={styles.syncStatusRow}>
+                  <Ionicons name="time" size={16} color="#f59e0b" />
+                  <Text style={styles.syncStatusText}>Pending</Text>
+                </View>
+              ) : (
+                <View style={styles.syncStatusRow}>
+                  <Ionicons name="close-circle" size={16} color="#ef4444" />
+                  <Text style={styles.syncStatusText}>Failed</Text>
+                </View>
+              )}
+            </View>
           </View>
 
           {product.lastSyncedAt && (
@@ -360,10 +378,15 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: '#FF3B30',
   },
+  lowStockContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   lowStockText: {
-    color: '#FF3B30',
+    color: '#f59e0b',
     fontWeight: '600',
     fontSize: 14,
+    marginLeft: 4,
   },
   statusValue: {
     fontSize: 16,
@@ -375,10 +398,18 @@ const styles = StyleSheet.create({
   inactiveStatus: {
     color: '#FF3B30',
   },
-  syncStatus: {
+  syncStatusContainer: {
+    alignItems: 'flex-end',
+  },
+  syncStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  syncStatusText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#666',
+    marginLeft: 4,
   },
   actionsContainer: {
     gap: 12,

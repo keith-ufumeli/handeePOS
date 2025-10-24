@@ -92,15 +92,23 @@ export default function ProductsScreen() {
           Stock: {item.stockQuantity} {item.unit}
         </Text>
         {item.isLowStock && (
-          <Text style={styles.lowStockWarning}>⚠️ Low Stock</Text>
+          <View style={styles.lowStockContainer}>
+            <Ionicons name="warning" size={16} color="#f59e0b" />
+            <Text style={styles.lowStockWarning}>Low Stock</Text>
+          </View>
         )}
       </View>
       
       <View style={styles.productFooter}>
-        <Text style={styles.syncStatus}>
-          {item.syncStatusValue === 'synced' ? '✅' : 
-           item.syncStatusValue === 'pending' ? '⏳' : '❌'}
-        </Text>
+        <View style={styles.syncStatusContainer}>
+          {item.syncStatusValue === 'synced' ? (
+            <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+          ) : item.syncStatusValue === 'pending' ? (
+            <Ionicons name="time" size={16} color="#f59e0b" />
+          ) : (
+            <Ionicons name="close-circle" size={16} color="#ef4444" />
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -455,17 +463,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+  lowStockContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
   lowStockWarning: {
     fontSize: 12,
-    color: '#FF3B30',
+    color: '#f59e0b',
     fontWeight: '600',
+    marginLeft: 4,
   },
   productFooter: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },
-  syncStatus: {
-    fontSize: 12,
+  syncStatusContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyContainer: {
     flex: 1,
