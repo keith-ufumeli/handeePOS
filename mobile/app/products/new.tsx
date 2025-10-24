@@ -9,12 +9,14 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useProductStore } from '@/stores/productStore';
-import Category from '@/database/models/Category';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useProductStore } from '../../src/stores/productStore';
+import Category from '../../src/database/models/Category';
 
 export default function NewProductScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { categories, createProduct, isLoading, error, clearError } = useProductStore();
   
   const [formData, setFormData] = useState({
@@ -38,7 +40,16 @@ export default function NewProductScreen() {
       Alert.alert('Error', error);
       clearError();
     }
-  }, [error]);
+  }, [error, clearError]);
+
+  useEffect(() => {
+    if (params.barcode) {
+      setFormData(prev => ({
+        ...prev,
+        barcode: params.barcode as string
+      }));
+    }
+  }, [params.barcode]);
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
@@ -102,7 +113,7 @@ export default function NewProductScreen() {
       Alert.alert('Success', 'Product created successfully', [
         { text: 'OK', onPress: () => router.back() },
       ]);
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to create product');
     }
   };
@@ -193,13 +204,29 @@ export default function NewProductScreen() {
           validationErrors.sku
         )}
 
-        {renderInput(
-          'Barcode',
-          formData.barcode,
-          (text) => setFormData({ ...formData, barcode: text }),
-          'Enter barcode (optional)',
-          'default'
-        )}
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Barcode</Text>
+          <View style={styles.barcodeInputContainer}>
+            <TextInput
+              style={styles.barcodeInput}
+              value={formData.barcode}
+              onChangeText={(text) => setFormData({ ...formData, barcode: text })}
+              placeholder="Enter barcode (optional)"
+              keyboardType="default"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity
+              style={styles.barcodeScanButton}
+              onPress={() => router.push('/barcode-scanner')}
+            >
+              <Ionicons name="barcode-outline" size={20} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
+          {validationErrors.barcode && (
+            <Text style={styles.errorText}>{validationErrors.barcode}</Text>
+          )}
+        </View>
 
         {renderSelect(
           'Category *',
@@ -207,7 +234,7 @@ export default function NewProductScreen() {
           (value) => setFormData({ ...formData, categoryId: value }),
           [
             { label: 'Select Category', value: '' },
-            ...categories.map((category) => ({
+            ...categories.map((category: Category) => ({
               label: category.name,
               value: category.id,
             })),
@@ -399,5 +426,30 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#666',
+  },
+  barcodeInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  barcodeInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    backgroundColor: '#f9f9f9',
+    marginRight: 8,
+  },
+  barcodeScanButton: {
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#f0f8ff',
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  inputContainer: {
+    marginBottom: 16,
   },
 });

@@ -22,13 +22,21 @@ export default class Order extends Model {
   @field('payments') payments!: string; // JSON string
   @field('status') status!: string;
   @field('custom_note') customNote?: string;
-  @field('sync_status') syncStatus!: string;
+  @field('sync_status') syncStatusField!: string;
   @field('last_synced_at') lastSyncedAt?: number;
   @field('server_id') serverId?: string;
   @readonly @date('created_at') createdAt!: Date;
   @readonly @date('completed_at') completedAt?: Date;
 
   // Helper methods
+  get syncStatusValue(): string {
+    return this.syncStatusField;
+  }
+
+  set syncStatusValue(value: string) {
+    this.syncStatusField = value;
+  }
+
   get orderItems(): ProductItem[] {
     try {
       return JSON.parse(this.items);

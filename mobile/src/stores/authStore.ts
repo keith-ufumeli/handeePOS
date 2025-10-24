@@ -2,7 +2,10 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiService from '../services/apiService';
-import syncService from '../services/syncService';
+import SyncService from '../services/syncService';
+
+// Create sync service instance
+const syncService = new SyncService('http://localhost:3000'); // TODO: Get from config
 
 export interface User {
   userId: string;

@@ -7,9 +7,18 @@ export default class Category extends Model {
   @field('name') name!: string;
   @field('description') description?: string;
   @field('is_active') isActive!: boolean;
-  @field('sync_status') syncStatus!: string;
+  @field('sync_status') syncStatusField!: string;
   @field('last_synced_at') lastSyncedAt?: number;
   @field('server_id') serverId?: string;
   @readonly @date('created_at') createdAt!: Date;
   @readonly @date('updated_at') updatedAt!: Date;
+
+  // Helper methods
+  get syncStatusValue(): string {
+    return this.syncStatusField;
+  }
+
+  set syncStatusValue(value: string) {
+    this.syncStatusField = value;
+  }
 }

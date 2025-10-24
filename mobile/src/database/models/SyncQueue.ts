@@ -2,14 +2,13 @@ import { Model } from '@nozbe/watermelondb';
 import { field, readonly, date } from '@nozbe/watermelondb/decorators';
 
 export type SyncOperation = 'create' | 'update' | 'delete';
-export type SyncCollection = 'products' | 'categories' | 'orders';
 export type SyncStatus = 'pending' | 'syncing' | 'completed' | 'failed';
 
 export default class SyncQueue extends Model {
   static table = 'sync_queue';
 
   @field('operation') operation!: SyncOperation;
-  @field('collection') collection!: SyncCollection;
+  @field('collection') collectionName!: string;
   @field('document_id') documentId!: string;
   @field('data') data!: string; // JSON string
   @field('status') status!: SyncStatus;
@@ -18,6 +17,7 @@ export default class SyncQueue extends Model {
   @readonly @date('timestamp') timestamp!: Date;
 
   // Helper methods
+
   get syncData(): any {
     try {
       return JSON.parse(this.data);

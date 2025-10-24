@@ -3,8 +3,7 @@ import database from '../database';
 import Product from '../database/models/Product';
 import Category from '../database/models/Category';
 import { Q } from '@nozbe/watermelondb';
-import apiService from '../services/apiService';
-import syncService from '../services/syncService';
+import SyncService from '../services/syncService';
 
 export interface ProductFilters {
   search?: string;
@@ -31,6 +30,7 @@ export interface ProductState {
   loadProducts: (filters?: ProductFilters) => Promise<void>;
   loadCategories: () => Promise<void>;
   searchProducts: (query: string) => Promise<void>;
+  searchProductsByBarcode: (barcode: string) => Promise<Product[]>;
   getProductById: (id: string) => Promise<Product | null>;
   createProduct: (data: any) => Promise<void>;
   updateProduct: (id: string, data: any) => Promise<void>;
@@ -40,6 +40,9 @@ export interface ProductState {
   setFilters: (filters: ProductFilters) => void;
   clearError: () => void;
 }
+
+// Create sync service instance
+const syncService = new SyncService('http://localhost:3000'); // TODO: Get from config
 
 export const useProductStore = create<ProductState>((set, get) => ({
   products: [],
@@ -157,6 +160,23 @@ export const useProductStore = create<ProductState>((set, get) => ({
     }
   },
 
+  searchProductsByBarcode: async (barcode: string) => {
+    try {
+      const products = await database.collections
+        .get<Product>('products')
+        .query(
+          Q.where('is_active', true),
+          Q.where('barcode', barcode)
+        )
+        .fetch();
+
+      return products;
+    } catch (error) {
+      console.error('Error searching products by barcode:', error);
+      return [];
+    }
+  },
+
   getProductById: async (id: string) => {
     try {
       const products = await database.collections
@@ -190,7 +210,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
           record.unit = data.unit || 'pcs';
           record.images = data.images ? JSON.stringify(data.images) : undefined;
           record.isActive = true;
-          record.syncStatus = 'pending';
+          record.syncStatusValue = 'pending';
         });
 
         // Add to sync queue
@@ -230,7 +250,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
           record.lowStockThreshold = data.lowStockThreshold;
           record.unit = data.unit;
           record.images = data.images ? JSON.stringify(data.images) : undefined;
-          record.syncStatus = 'pending';
+          record.syncStatusValue = 'pending';
         });
 
         // Add to sync queue
@@ -260,7 +280,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
         await product.update((record) => {
           record.isActive = false;
-          record.syncStatus = 'pending';
+          record.syncStatusValue = 'pending';
         });
 
         // Add to sync queue
@@ -290,7 +310,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
         await product.update((record) => {
           record.stockQuantity = stockQuantity;
-          record.syncStatus = 'pending';
+          record.syncStatusValue = 'pending';
         });
 
         // Add to sync queue

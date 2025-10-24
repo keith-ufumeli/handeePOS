@@ -1,8 +1,7 @@
 import database from '../database';
 import Product from '../database/models/Product';
 import Category from '../database/models/Category';
-import Order from '../database/models/Order';
-import SyncQueue, { SyncOperation, SyncCollection, SyncStatus } from '../database/models/SyncQueue';
+import SyncQueue, { SyncOperation } from '../database/models/SyncQueue';
 import { Q } from '@nozbe/watermelondb';
 
 export interface SyncResult {
@@ -97,7 +96,7 @@ class SyncService {
     try {
       const data = item.syncData;
       
-      switch (item.collection) {
+      switch (item.collectionName) {
         case 'products':
           await this.syncProduct(item.operation, data);
           break;
@@ -249,7 +248,7 @@ class SyncService {
             product.unit = serverProduct.unit;
             product.images = serverProduct.images ? JSON.stringify(serverProduct.images) : undefined;
             product.isActive = serverProduct.isActive;
-            product.syncStatus = 'synced';
+            product.syncStatusValue = 'synced';
             product.lastSyncedAt = Date.now();
           });
         } else {
@@ -267,7 +266,7 @@ class SyncService {
             product.unit = serverProduct.unit;
             product.images = serverProduct.images ? JSON.stringify(serverProduct.images) : undefined;
             product.isActive = serverProduct.isActive;
-            product.syncStatus = 'synced';
+            product.syncStatusValue = 'synced';
             product.serverId = serverProduct._id;
             product.lastSyncedAt = Date.now();
           });
@@ -294,7 +293,7 @@ class SyncService {
             category.name = serverCategory.name;
             category.description = serverCategory.description;
             category.isActive = serverCategory.isActive;
-            category.syncStatus = 'synced';
+            category.syncStatusValue = 'synced';
             category.lastSyncedAt = Date.now();
           });
         } else {
@@ -303,7 +302,7 @@ class SyncService {
             category.name = serverCategory.name;
             category.description = serverCategory.description;
             category.isActive = serverCategory.isActive;
-            category.syncStatus = 'synced';
+            category.syncStatusValue = 'synced';
             category.serverId = serverCategory._id;
             category.lastSyncedAt = Date.now();
           });
@@ -317,19 +316,19 @@ class SyncService {
    */
   async addToSyncQueue(
     operation: SyncOperation,
-    collection: SyncCollection,
+    collection: string,
     documentId: string,
     data: any
   ): Promise<void> {
     await database.write(async () => {
       await database.collections.get<SyncQueue>('sync_queue').create((item) => {
         item.operation = operation;
-        item.collection = collection;
+        item.collectionName = collection;
         item.documentId = documentId;
         item.syncData = data;
         item.status = 'pending';
         item.retryCount = 0;
-        item.timestamp = Date.now();
+        item.timestamp = new Date();
       });
     });
   }

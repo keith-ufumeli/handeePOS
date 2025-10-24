@@ -11,14 +11,14 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useProductStore } from '@/stores/productStore';
-import { useAuthStore } from '@/stores/authStore';
-import Product from '@/database/models/Product';
-import Category from '@/database/models/Category';
+import { Ionicons } from '@expo/vector-icons';
+import { useProductStore } from '../../src/stores/productStore';
+import { useAuthStore } from '../../src/stores/authStore';
+import Product from '../../src/database/models/Product';
 
 export default function ProductsScreen() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
   const {
     products,
     categories,
@@ -41,7 +41,7 @@ export default function ProductsScreen() {
       loadProducts();
       loadCategories();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, loadProducts, loadCategories]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -56,7 +56,7 @@ export default function ProductsScreen() {
     try {
       await syncProducts();
       Alert.alert('Success', 'Products synced successfully');
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to sync products');
     }
   };
@@ -98,8 +98,8 @@ export default function ProductsScreen() {
       
       <View style={styles.productFooter}>
         <Text style={styles.syncStatus}>
-          {item.syncStatus === 'synced' ? '✅' : 
-           item.syncStatus === 'pending' ? '⏳' : '❌'}
+          {item.syncStatusValue === 'synced' ? '✅' : 
+           item.syncStatusValue === 'pending' ? '⏳' : '❌'}
         </Text>
       </View>
     </TouchableOpacity>
@@ -176,6 +176,12 @@ export default function ProductsScreen() {
           value={searchQuery}
           onChangeText={handleSearch}
         />
+        <TouchableOpacity
+          style={styles.barcodeButton}
+          onPress={() => router.push('/barcode-scanner')}
+        >
+          <Ionicons name="barcode-outline" size={24} color="#007AFF" />
+        </TouchableOpacity>
       </View>
 
       {renderCategoryFilter()}
@@ -283,10 +289,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   searchContainer: {
+    flexDirection: 'row',
     padding: 16,
     backgroundColor: '#fff',
+    alignItems: 'center',
   },
   searchInput: {
+    flex: 1,
     borderWidth: 1,
     borderColor: '#e0e0e0',
     borderRadius: 8,
@@ -294,6 +303,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
     backgroundColor: '#f9f9f9',
+    marginRight: 12,
+  },
+  barcodeButton: {
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#f0f8ff',
+    borderWidth: 1,
+    borderColor: '#007AFF',
   },
   filterContainer: {
     padding: 16,
