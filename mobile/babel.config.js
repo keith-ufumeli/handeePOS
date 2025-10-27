@@ -33,8 +33,8 @@ module.exports = function (api) {
       // React Native Paper babel plugin for tree shaking
       'react-native-paper/babel',
       
-      // Moti babel plugin for animations
-      'moti/babel-plugin',
+      // Moti babel plugin for animations - temporarily disabled due to export issues
+      // ['moti/babel-plugin', { platform: 'native' }],
       
       // React Native Reanimated plugin (MUST be last)
       'react-native-reanimated/plugin',
