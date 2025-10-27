@@ -97,7 +97,7 @@ export default function CustomersScreen() {
   const renderCustomer = ({ item }: { item: Customer }) => (
     <TouchableOpacity
       style={styles.customerCard}
-      onPress={() => router.push(`/customers/${item._id}`)}
+      onPress={() => router.push(`/customers/${item._id}` as any)}
     >
       <View style={styles.customerHeader}>
         <View style={styles.customerInfo}>
@@ -181,7 +181,7 @@ export default function CustomersScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.addButton}
-            onPress={() => router.push('/customers/new')}
+            onPress={() => router.push('/customers/new' as any)}
           >
             <Ionicons name="add" size={24} color="#FFFFFF" />
           </TouchableOpacity>

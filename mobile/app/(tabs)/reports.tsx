@@ -181,28 +181,28 @@ export default function ReportsScreen() {
           <View style={styles.quickActions}>
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => router.push('/reports/sales')}
+              onPress={() => router.push('/reports/sales' as any)}
             >
               <Ionicons name="bar-chart-outline" size={24} color="#3B82F6" />
               <Text style={styles.actionText}>Sales Report</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => router.push('/reports/inventory')}
+              onPress={() => router.push('/reports/inventory' as any)}
             >
               <Ionicons name="cube-outline" size={24} color="#8B5CF6" />
               <Text style={styles.actionText}>Inventory</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => router.push('/reports/customers')}
+              onPress={() => router.push('/reports/customers' as any)}
             >
               <Ionicons name="people-outline" size={24} color="#10B981" />
               <Text style={styles.actionText}>Customers</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => router.push('/reports/export')}
+              onPress={() => router.push('/reports/export' as any)}
             >
               <Ionicons name="download-outline" size={24} color="#F59E0B" />
               <Text style={styles.actionText}>Export</Text>
