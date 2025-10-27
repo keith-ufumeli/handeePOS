@@ -16,9 +16,38 @@ export interface IStore extends Document {
   timezone: string;
   logo?: string;
   receiptSettings: {
-    header: string;
-    footer: string;
+    headerText: string;
+    footerText: string;
     showLogo: boolean;
+    logoUrl?: string;
+    showTaxBreakdown: boolean;
+    showLoyaltyPoints: boolean;
+    paperSize: string;
+    fontSize: string;
+    showQRCode: boolean;
+    qrCodeData?: string;
+  };
+  taxSettings: {
+    defaultTaxRate: number;
+    taxInclusive: boolean;
+    taxName: string;
+    taxNumber?: string;
+    showTaxOnReceipt: boolean;
+  };
+  businessHours: {
+    [key: string]: {
+      isOpen: boolean;
+      openTime: string;
+      closeTime: string;
+      breakStart?: string;
+      breakEnd?: string;
+    };
+  };
+  features: {
+    loyaltyProgram: boolean;
+    multiStore: boolean;
+    advancedReports: boolean;
+    inventoryTracking: boolean;
   };
   isActive: boolean;
   createdAt: Date;
@@ -94,12 +123,12 @@ const StoreSchema = new Schema<IStore>({
     trim: true
   },
   receiptSettings: {
-    header: {
+    headerText: {
       type: String,
       default: 'Thank you for your business!',
       maxlength: [200, 'Header text cannot exceed 200 characters']
     },
-    footer: {
+    footerText: {
       type: String,
       default: 'Visit us again soon!',
       maxlength: [200, 'Footer text cannot exceed 200 characters']
@@ -107,6 +136,107 @@ const StoreSchema = new Schema<IStore>({
     showLogo: {
       type: Boolean,
       default: false
+    },
+    logoUrl: {
+      type: String,
+      trim: true
+    },
+    showTaxBreakdown: {
+      type: Boolean,
+      default: true
+    },
+    showLoyaltyPoints: {
+      type: Boolean,
+      default: true
+    },
+    paperSize: {
+      type: String,
+      default: '80mm',
+      enum: ['80mm', '58mm', 'A4']
+    },
+    fontSize: {
+      type: String,
+      default: 'normal',
+      enum: ['small', 'normal', 'large']
+    },
+    showQRCode: {
+      type: Boolean,
+      default: false
+    },
+    qrCodeData: {
+      type: String,
+      trim: true
+    }
+  },
+  taxSettings: {
+    defaultTaxRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    },
+    taxInclusive: {
+      type: Boolean,
+      default: false
+    },
+    taxName: {
+      type: String,
+      default: 'VAT',
+      maxlength: [50, 'Tax name cannot exceed 50 characters']
+    },
+    taxNumber: {
+      type: String,
+      trim: true,
+      maxlength: [50, 'Tax number cannot exceed 50 characters']
+    },
+    showTaxOnReceipt: {
+      type: Boolean,
+      default: true
+    }
+  },
+  businessHours: {
+    type: Map,
+    of: {
+      isOpen: {
+        type: Boolean,
+        default: false
+      },
+      openTime: {
+        type: String,
+        default: '09:00',
+        match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Please enter a valid time format (HH:MM)']
+      },
+      closeTime: {
+        type: String,
+        default: '17:00',
+        match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Please enter a valid time format (HH:MM)']
+      },
+      breakStart: {
+        type: String,
+        match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Please enter a valid time format (HH:MM)']
+      },
+      breakEnd: {
+        type: String,
+        match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Please enter a valid time format (HH:MM)']
+      }
+    }
+  },
+  features: {
+    loyaltyProgram: {
+      type: Boolean,
+      default: false
+    },
+    multiStore: {
+      type: Boolean,
+      default: false
+    },
+    advancedReports: {
+      type: Boolean,
+      default: false
+    },
+    inventoryTracking: {
+      type: Boolean,
+      default: true
     }
   },
   isActive: {
