@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { apiService } from '@/services/apiService';
+import apiService from '@/services/apiService';
 
 export interface StoreSettings {
   _id: string;
@@ -76,12 +76,12 @@ export interface TestReceipt {
   phoneNumber?: string;
   orderNumber: string;
   date: string;
-  items: Array<{
+  items: {
     name: string;
     quantity: number;
     price: number;
     total: number;
-  }>;
+  }[];
   subtotal: number;
   tax: number;
   total: number;
@@ -120,7 +120,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   fetchStoreSettings: async () => {
     set({ loading: true, error: null });
     try {
-      const response = await apiService.get('/settings/store');
+      const response = await apiService.getStoreSettings();
       set({ 
         storeSettings: response.data,
         loading: false 
@@ -136,7 +136,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   updateStoreSettings: async (settings: Partial<StoreSettings>) => {
     set({ loading: true, error: null });
     try {
-      const response = await apiService.put('/settings/store', settings);
+      const response = await apiService.updateStoreSettings(settings);
       set({ 
         storeSettings: response.data,
         loading: false 
@@ -153,7 +153,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   updateReceiptSettings: async (settings: Partial<StoreSettings['receiptSettings']>) => {
     set({ loading: true, error: null });
     try {
-      const response = await apiService.put('/settings/receipt', settings);
+      const response = await apiService.updateReceiptSettings(settings);
       const updatedSettings = response.data;
       
       set(state => ({
@@ -175,7 +175,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   updateTaxSettings: async (settings: Partial<StoreSettings['taxSettings']>) => {
     set({ loading: true, error: null });
     try {
-      const response = await apiService.put('/settings/tax', settings);
+      const response = await apiService.updateTaxSettings(settings);
       const updatedSettings = response.data;
       
       set(state => ({
@@ -197,7 +197,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   updateBusinessHours: async (hours: StoreSettings['businessHours']) => {
     set({ loading: true, error: null });
     try {
-      const response = await apiService.put('/settings/business-hours', hours);
+      const response = await apiService.updateBusinessHours(hours);
       const updatedHours = response.data;
       
       set(state => ({
@@ -218,7 +218,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   fetchSystemInfo: async () => {
     try {
-      const response = await apiService.get('/settings/system');
+      const response = await apiService.getSystemInfo();
       set({ systemInfo: response.data });
     } catch (error: any) {
       set({ error: error.message || 'Failed to fetch system information' });
@@ -228,7 +228,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   testReceiptPrinter: async () => {
     set({ loading: true, error: null });
     try {
-      const response = await apiService.post('/settings/test-receipt');
+      const response = await apiService.testReceiptPrinter();
       set({ 
         testReceipt: response.data,
         loading: false 

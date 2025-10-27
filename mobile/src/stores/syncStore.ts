@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { apiService } from '@/services/apiService';
+import apiService from '@/services/apiService';
 import { useOrderStore } from './orderStore';
 import { useProductStore } from './productStore';
 import { useCustomerStore } from './customerStore';
@@ -123,7 +123,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
       // Process creates
       for (const item of creates) {
         try {
-          await apiService.post('/orders', item.data);
+          await apiService.createOrder(item.data);
           get().removeFromSyncQueue(item.id);
         } catch (error) {
           console.error('Failed to sync order create:', error);
@@ -141,7 +141,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
       // Process updates
       for (const item of updates) {
         try {
-          await apiService.put(`/orders/${item.documentId}`, item.data);
+          await apiService.updateOrder(item.documentId, item.data);
           get().removeFromSyncQueue(item.id);
         } catch (error) {
           console.error('Failed to sync order update:', error);
@@ -158,7 +158,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
       // Process deletes
       for (const item of deletes) {
         try {
-          await apiService.delete(`/orders/${item.documentId}`);
+          await apiService.deleteOrder(item.documentId);
           get().removeFromSyncQueue(item.id);
         } catch (error) {
           console.error('Failed to sync order delete:', error);
@@ -174,7 +174,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
 
       // Refresh local orders
       const orderStore = useOrderStore.getState();
-      await orderStore.fetchOrders();
+      await orderStore.loadOrders();
     } catch (error) {
       console.error('Order sync failed:', error);
       throw error;
@@ -196,7 +196,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
       // Process creates
       for (const item of creates) {
         try {
-          await apiService.post('/products', item.data);
+          await apiService.createProduct(item.data);
           get().removeFromSyncQueue(item.id);
         } catch (error) {
           console.error('Failed to sync product create:', error);
@@ -213,7 +213,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
       // Process updates
       for (const item of updates) {
         try {
-          await apiService.put(`/products/${item.documentId}`, item.data);
+          await apiService.updateProduct(item.documentId, item.data);
           get().removeFromSyncQueue(item.id);
         } catch (error) {
           console.error('Failed to sync product update:', error);
@@ -230,7 +230,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
       // Process deletes
       for (const item of deletes) {
         try {
-          await apiService.delete(`/products/${item.documentId}`);
+          await apiService.deleteProduct(item.documentId);
           get().removeFromSyncQueue(item.id);
         } catch (error) {
           console.error('Failed to sync product delete:', error);
@@ -246,7 +246,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
 
       // Refresh local products
       const productStore = useProductStore.getState();
-      await productStore.fetchProducts();
+      await productStore.loadProducts();
     } catch (error) {
       console.error('Product sync failed:', error);
       throw error;
@@ -268,7 +268,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
       // Process creates
       for (const item of creates) {
         try {
-          await apiService.post('/customers', item.data);
+          await apiService.createCustomer(item.data);
           get().removeFromSyncQueue(item.id);
         } catch (error) {
           console.error('Failed to sync customer create:', error);
@@ -285,7 +285,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
       // Process updates
       for (const item of updates) {
         try {
-          await apiService.put(`/customers/${item.documentId}`, item.data);
+          await apiService.updateCustomer(item.documentId, item.data);
           get().removeFromSyncQueue(item.id);
         } catch (error) {
           console.error('Failed to sync customer update:', error);
@@ -302,7 +302,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
       // Process deletes
       for (const item of deletes) {
         try {
-          await apiService.delete(`/customers/${item.documentId}`);
+          await apiService.deleteCustomer(item.documentId);
           get().removeFromSyncQueue(item.id);
         } catch (error) {
           console.error('Failed to sync customer delete:', error);

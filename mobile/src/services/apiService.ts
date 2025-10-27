@@ -214,6 +214,163 @@ class ApiService {
     const params = date ? `?date=${encodeURIComponent(date)}` : '';
     return this.makeRequest(`/api/orders/stats${params}`);
   }
+
+  // Generic HTTP methods
+  async get<T = any>(endpoint: string): Promise<T> {
+    return this.makeRequest<T>(endpoint);
+  }
+
+  async post<T = any>(endpoint: string, data?: any): Promise<T> {
+    return this.makeRequest<T>(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async put<T = any>(endpoint: string, data?: any): Promise<T> {
+    return this.makeRequest<T>(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async delete<T = any>(endpoint: string): Promise<T> {
+    return this.makeRequest<T>(endpoint, {
+      method: 'DELETE',
+    });
+  }
+
+  // Customer endpoints
+  async getCustomers(params: {
+    search?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  } = {}) {
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        queryParams.append(key, String(value));
+      }
+    });
+
+    return this.makeRequest<PaginatedResponse<any>>(`/api/customers?${queryParams}`);
+  }
+
+  async getCustomer(id: string) {
+    return this.makeRequest(`/api/customers/${id}`);
+  }
+
+  async createCustomer(data: any) {
+    return this.makeRequest('/api/customers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateCustomer(id: string, data: any) {
+    return this.makeRequest(`/api/customers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCustomer(id: string) {
+    return this.makeRequest(`/api/customers/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async searchCustomers(query: string) {
+    return this.makeRequest(`/api/customers/search?query=${encodeURIComponent(query)}`);
+  }
+
+  async getCustomerStats() {
+    return this.makeRequest('/api/customers/stats');
+  }
+
+  async updateCustomerLoyaltyPoints(id: string, points: number, operation: 'add' | 'subtract') {
+    return this.makeRequest(`/api/customers/${id}/loyalty`, {
+      method: 'PUT',
+      body: JSON.stringify({ points, operation }),
+    });
+  }
+
+  // Report endpoints
+  async getDailySalesSummary(date?: string) {
+    const params = date ? `?date=${encodeURIComponent(date)}` : '';
+    return this.makeRequest(`/api/reports/daily-summary${params}`);
+  }
+
+  async getSalesReport(startDate: string, endDate: string, groupBy = 'day') {
+    return this.makeRequest(`/api/reports/sales?startDate=${startDate}&endDate=${endDate}&groupBy=${groupBy}`);
+  }
+
+  async getProductPerformance(startDate?: string, endDate?: string, sortBy = 'sales', limit = 50) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    params.append('sortBy', sortBy);
+    params.append('limit', limit.toString());
+    
+    return this.makeRequest(`/api/reports/products?${params.toString()}`);
+  }
+
+  async getInventoryValuation() {
+    return this.makeRequest('/api/reports/inventory');
+  }
+
+  async getCustomerAnalytics(startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    
+    return this.makeRequest(`/api/reports/customers?${params.toString()}`);
+  }
+
+  // Settings endpoints
+  async getStoreSettings() {
+    return this.makeRequest('/api/settings/store');
+  }
+
+  async updateStoreSettings(data: any) {
+    return this.makeRequest('/api/settings/store', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateReceiptSettings(data: any) {
+    return this.makeRequest('/api/settings/receipt', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateTaxSettings(data: any) {
+    return this.makeRequest('/api/settings/tax', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateBusinessHours(data: any) {
+    return this.makeRequest('/api/settings/business-hours', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSystemInfo() {
+    return this.makeRequest('/api/settings/system');
+  }
+
+  async testReceiptPrinter() {
+    return this.makeRequest('/api/settings/test-receipt', {
+      method: 'POST',
+    });
+  }
 }
 
 export default new ApiService();

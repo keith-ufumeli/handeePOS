@@ -12,9 +12,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { useAuthStore } from '@/stores/authStore';
 
 interface StoreSettings {
   _id: string;
@@ -66,17 +64,12 @@ interface StoreSettings {
 }
 
 export default function SettingsScreen() {
-  const router = useRouter();
-  const { user } = useAuthStore();
   const {
     storeSettings,
     loading,
     refreshing,
     fetchStoreSettings,
     updateStoreSettings,
-    updateReceiptSettings,
-    updateTaxSettings,
-    updateBusinessHours,
     refreshSettings
   } = useSettingsStore();
 
@@ -86,7 +79,7 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     fetchStoreSettings();
-  }, []);
+  }, [fetchStoreSettings]);
 
   const handleSave = async () => {
     try {
@@ -94,7 +87,7 @@ export default function SettingsScreen() {
       setIsEditing(false);
       setEditedSettings({});
       Alert.alert('Success', 'Settings updated successfully');
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to update settings');
     }
   };
@@ -118,7 +111,7 @@ export default function SettingsScreen() {
         ...prev.receiptSettings,
         ...storeSettings?.receiptSettings,
         [field]: value
-      }
+      } as StoreSettings['receiptSettings']
     }));
   };
 
@@ -129,7 +122,7 @@ export default function SettingsScreen() {
         ...prev.taxSettings,
         ...storeSettings?.taxSettings,
         [field]: value
-      }
+      } as StoreSettings['taxSettings']
     }));
   };
 

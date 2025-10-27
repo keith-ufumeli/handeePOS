@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { apiService } from '@/services/apiService';
+import apiService from '@/services/apiService';
 
 export interface DailySummary {
   date: string;
@@ -12,12 +12,12 @@ export interface DailySummary {
     cardSales: number;
     mobileMoneySales: number;
   };
-  hourlyBreakdown: Array<{
+  hourlyBreakdown: {
     _id: number;
     sales: number;
     orders: number;
-  }>;
-  topProducts: Array<{
+  }[];
+  topProducts: {
     _id: {
       productId: string;
       productName: string;
@@ -25,14 +25,14 @@ export interface DailySummary {
     };
     totalQuantity: number;
     totalRevenue: number;
-  }>;
+  }[];
 }
 
 export interface SalesReport {
   startDate: string;
   endDate: string;
   groupBy: string;
-  data: Array<{
+  data: {
     _id: any;
     totalSales: number;
     totalOrders: number;
@@ -41,14 +41,14 @@ export interface SalesReport {
     cashSales: number;
     cardSales: number;
     mobileMoneySales: number;
-  }>;
+  }[];
 }
 
 export interface ProductPerformance {
   startDate: string;
   endDate: string;
   sortBy: string;
-  products: Array<{
+  products: {
     _id: {
       productId: string;
       productName: string;
@@ -60,7 +60,7 @@ export interface ProductPerformance {
     averagePrice: number;
     totalDiscount: number;
     totalTax: number;
-  }>;
+  }[];
 }
 
 export interface InventoryValuation {
@@ -82,7 +82,7 @@ export interface CustomerAnalytics {
     averageSpent: number;
     averageOrders: number;
   };
-  topCustomers: Array<{
+  topCustomers: {
     _id: string;
     name: string;
     email?: string;
@@ -91,7 +91,7 @@ export interface CustomerAnalytics {
     totalOrders: number;
     loyaltyPoints: number;
     tier: string;
-  }>;
+  }[];
   newCustomers: number;
 }
 
