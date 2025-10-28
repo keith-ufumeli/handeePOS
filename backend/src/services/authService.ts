@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { IUser } from '@/models/User';
 import logger from '@/utils/logger';
 
@@ -20,7 +21,9 @@ class AuthService {
   private readonly JWT_SECRET = process.env['JWT_SECRET'] || 'your-secret-key';
   private readonly JWT_REFRESH_SECRET = process.env['JWT_REFRESH_SECRET'] || 'your-refresh-secret-key';
   private readonly ACCESS_TOKEN_EXPIRES_IN = '15m';
+  private readonly ACCESS_TOKEN_EXPIRES_IN_REMEMBERED = '1d';
   private readonly REFRESH_TOKEN_EXPIRES_IN = '7d';
+  private readonly REFRESH_TOKEN_EXPIRES_IN_REMEMBERED = '30d';
 
   /**
    * Hash password using bcrypt
@@ -40,9 +43,9 @@ class AuthService {
   /**
    * Generate access token
    */
-  generateAccessToken(payload: TokenPayload): string {
+  generateAccessToken(payload: TokenPayload, rememberMe: boolean = false): string {
     return jwt.sign(payload, this.JWT_SECRET, {
-      expiresIn: this.ACCESS_TOKEN_EXPIRES_IN,
+      expiresIn: rememberMe ? this.ACCESS_TOKEN_EXPIRES_IN_REMEMBERED : this.ACCESS_TOKEN_EXPIRES_IN,
       issuer: 'handeepos-api',
       audience: 'handeepos-mobile'
     });
@@ -51,9 +54,9 @@ class AuthService {
   /**
    * Generate refresh token
    */
-  generateRefreshToken(payload: TokenPayload): string {
+  generateRefreshToken(payload: TokenPayload, rememberMe: boolean = false): string {
     return jwt.sign(payload, this.JWT_REFRESH_SECRET, {
-      expiresIn: this.REFRESH_TOKEN_EXPIRES_IN,
+      expiresIn: rememberMe ? this.REFRESH_TOKEN_EXPIRES_IN_REMEMBERED : this.REFRESH_TOKEN_EXPIRES_IN,
       issuer: 'handeepos-api',
       audience: 'handeepos-mobile'
     });
@@ -62,7 +65,7 @@ class AuthService {
   /**
    * Generate both access and refresh tokens
    */
-  generateTokens(user: IUser): AuthTokens {
+  generateTokens(user: IUser, rememberMe: boolean = false): AuthTokens {
     const payload: TokenPayload = {
       userId: user._id.toString(),
       email: user.email,
@@ -72,8 +75,8 @@ class AuthService {
     };
 
     return {
-      accessToken: this.generateAccessToken(payload),
-      refreshToken: this.generateRefreshToken(payload)
+      accessToken: this.generateAccessToken(payload, rememberMe),
+      refreshToken: this.generateRefreshToken(payload, rememberMe)
     };
   }
 
@@ -142,6 +145,24 @@ class AuthService {
     return requiredPermissions.every(permission => 
       userPermissions.includes(permission)
     );
+  }
+
+  /**
+   * Generate password reset token
+   */
+  async generatePasswordResetToken(user: IUser): Promise<string> {
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    return resetToken;
+  }
+
+  /**
+   * Send password reset email
+   */
+  async sendPasswordResetEmail(email: string, token: string): Promise<void> {
+    // TODO: Implement email sending logic
+    // For now, just log the reset link
+    const resetLink = `${process.env['FRONTEND_URL']}/reset-password?token=${token}`;
+    logger.info(`Password reset link for ${email}: ${resetLink}`);
   }
 }
 

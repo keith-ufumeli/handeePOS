@@ -91,7 +91,7 @@ export class AuthController {
         return;
       }
 
-      const { email, password } = req.body;
+      const { email, password, rememberMe = false } = req.body;
 
       // Find user by email
       const user = await User.findOne({ 
@@ -117,8 +117,8 @@ export class AuthController {
         return;
       }
 
-      // Generate tokens
-      const tokens = authService.generateTokens(user);
+      // Generate tokens with remember me option
+      const tokens = authService.generateTokens(user, rememberMe);
 
       // Update last login
       user.lastLogin = new Date();
@@ -274,6 +274,102 @@ export class AuthController {
 
     } catch (error) {
       logger.error('Logout error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+
+  /**
+   * Request password reset
+   */
+  async forgotPassword(req: Request, res: Response): Promise<void> {
+    try {
+      const { email } = req.body;
+
+      // Find user by email
+      const user = await User.findOne({ 
+        email: email.toLowerCase(),
+        isActive: true 
+      });
+
+      if (!user) {
+        // For security, don't reveal if email exists
+        res.status(200).json({
+          success: true,
+          message: 'If your email is registered, you will receive a password reset link'
+        });
+        return;
+      }
+
+      // Generate reset token
+      const resetToken = await authService.generatePasswordResetToken(user);
+
+      // Save reset token and expiry
+      user.resetToken = resetToken;
+      user.resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
+      await user.save();
+
+      // Send reset email
+      await authService.sendPasswordResetEmail(user.email, resetToken);
+
+      logger.info(`Password reset requested for user ${user.email}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'If your email is registered, you will receive a password reset link'
+      });
+
+    } catch (error) {
+      logger.error('Password reset request error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+
+  /**
+   * Reset password with token
+   */
+  async resetPassword(req: Request, res: Response): Promise<void> {
+    try {
+      const { token, password } = req.body;
+
+      // Find user by reset token and check expiry
+      const user = await User.findOne({
+        resetToken: token,
+        resetTokenExpiry: { $gt: new Date() },
+        isActive: true
+      });
+
+      if (!user) {
+        res.status(400).json({
+          success: false,
+          message: 'Invalid or expired reset token'
+        });
+        return;
+      }
+
+      // Hash new password
+      const passwordHash = await authService.hashPassword(password);
+
+      // Update user password and clear reset token
+      user.passwordHash = passwordHash;
+      user.resetToken = undefined;
+      user.resetTokenExpiry = undefined;
+      await user.save();
+
+      logger.info(`Password reset successful for user ${user.email}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Password reset successful'
+      });
+
+    } catch (error) {
+      logger.error('Password reset error:', error);
       res.status(500).json({
         success: false,
         message: 'Internal server error'

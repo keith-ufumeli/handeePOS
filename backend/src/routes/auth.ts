@@ -6,7 +6,9 @@ import {
   validateLogin,
   validateRegister, 
   validateRefreshToken, 
-  validateChangePassword 
+  validateChangePassword,
+  validateForgotPassword,
+  validateResetPassword
 } from '@/middleware/validation';
 
 const router = Router();
@@ -221,5 +223,64 @@ router.get('/me', authenticate, authController.getProfile);
  *         description: Internal server error
  */
 router.post('/change-password', authenticate, validateChangePassword, authController.changePassword);
+
+/**
+ * @swagger
+ * /api/auth/forgot-password:
+ *   post:
+ *     summary: Request password reset
+ *     description: Send password reset email to user
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Reset email sent (if email exists)
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/forgot-password', validateForgotPassword, authController.forgotPassword);
+
+/**
+ * @swagger
+ * /api/auth/reset-password:
+ *   post:
+ *     summary: Reset password
+ *     description: Reset password using token from email
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - password
+ *             properties:
+ *               token:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *                 format: password
+ *     responses:
+ *       200:
+ *         description: Password reset successful
+ *       400:
+ *         description: Invalid or expired token
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/reset-password', validateResetPassword, authController.resetPassword);
 
 export default router;

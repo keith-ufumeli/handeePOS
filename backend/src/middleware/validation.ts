@@ -16,7 +16,12 @@ export const validateLogin: ValidationChain[] = [
     .isLength({ min: 6 })
     .withMessage('Password must be at least 6 characters long')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number')
+    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
+  
+  body('rememberMe')
+    .optional()
+    .isBoolean()
+    .withMessage('Remember me must be a boolean value')
 ];
 
 /**
@@ -28,6 +33,37 @@ export const validateRefreshToken: ValidationChain[] = [
     .withMessage('Refresh token is required')
     .isString()
     .withMessage('Refresh token must be a string')
+];
+
+/**
+ * Change password validation rules
+ */
+/**
+ * Password recovery request validation rules
+ */
+export const validateForgotPassword: ValidationChain[] = [
+  body('email')
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail()
+    .toLowerCase()
+];
+
+/**
+ * Password reset validation rules
+ */
+export const validateResetPassword: ValidationChain[] = [
+  body('token')
+    .notEmpty()
+    .withMessage('Reset token is required')
+    .isString()
+    .withMessage('Reset token must be a string'),
+  
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters long')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number')
 ];
 
 /**

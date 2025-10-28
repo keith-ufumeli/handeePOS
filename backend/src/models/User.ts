@@ -11,6 +11,8 @@ export interface IUser extends Document {
   permissions: string[];
   isActive: boolean;
   lastLogin?: Date;
+  resetToken?: string | undefined;
+  resetTokenExpiry?: Date | undefined;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -66,6 +68,16 @@ const UserSchema = new Schema<IUser>({
   },
   lastLogin: {
     type: Date
+  },
+  resetToken: {
+    type: String,
+    select: false,
+    sparse: true
+  },
+  resetTokenExpiry: {
+    type: Date,
+    select: false,
+    sparse: true
   }
 }, {
   timestamps: true,
