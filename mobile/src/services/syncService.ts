@@ -4,6 +4,19 @@ import Category from '../database/models/Category';
 import SyncQueue, { SyncOperation } from '../database/models/SyncQueue';
 import { Q } from '@nozbe/watermelondb';
 
+// Add error handling for database initialization
+let isDatabaseReady = false;
+let databaseError: Error | null = null;
+
+try {
+  // Test database connection
+  database.adapter.schema;
+  isDatabaseReady = true;
+} catch (error) {
+  console.warn('Database not ready:', error);
+  databaseError = error as Error;
+}
+
 export interface SyncResult {
   success: boolean;
   syncedCount: number;
@@ -21,6 +34,14 @@ class SyncService {
 
   setAuthToken(token: string) {
     this.authToken = token;
+  }
+
+  private checkDatabaseReady(): boolean {
+    if (!isDatabaseReady) {
+      console.warn('Database not ready, skipping sync operation');
+      return false;
+    }
+    return true;
   }
 
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
@@ -53,6 +74,12 @@ class SyncService {
       failedCount: 0,
       errors: [],
     };
+
+    if (!this.checkDatabaseReady()) {
+      result.success = false;
+      result.errors.push('Database not ready');
+      return result;
+    }
 
     try {
       // Get all pending sync queue items

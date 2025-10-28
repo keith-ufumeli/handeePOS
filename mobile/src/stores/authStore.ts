@@ -3,9 +3,15 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiService from '../services/apiService';
 import SyncService from '../services/syncService';
+import { config } from '../config';
 
-// Create sync service instance
-const syncService = new SyncService('http://localhost:3000'); // TODO: Get from config
+// Create sync service instance with error handling
+let syncService: SyncService | null = null;
+try {
+  syncService = new SyncService(config.apiUrl);
+} catch (error) {
+  console.warn('Failed to initialize sync service:', error);
+}
 
 export interface User {
   userId: string;
@@ -44,9 +50,9 @@ export const useAuthStore = create<AuthState>()(
           if (response.success) {
             const { accessToken, user } = response.data;
             
-            // Set auth token for API service and sync service
-            apiService.setAuthToken(accessToken);
-            syncService.setAuthToken(accessToken);
+                // Set auth token for API service and sync service
+                apiService.setAuthToken(accessToken);
+                syncService?.setAuthToken(accessToken);
             
             set({
               user,
@@ -78,7 +84,7 @@ export const useAuthStore = create<AuthState>()(
         } finally {
           // Clear auth token
           apiService.setAuthToken('');
-          syncService.setAuthToken('');
+          syncService?.setAuthToken('');
           
           set({
             user: null,
@@ -98,7 +104,7 @@ export const useAuthStore = create<AuthState>()(
             
             // Update auth token
             apiService.setAuthToken(accessToken);
-            syncService.setAuthToken(accessToken);
+            syncService?.setAuthToken(accessToken);
           } else {
             // Token refresh failed, logout user
             get().logout();

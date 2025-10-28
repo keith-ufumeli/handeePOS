@@ -1,7 +1,8 @@
 import { Platform } from 'react-native';
+import { config } from '../config';
 
 const API_BASE_URL = __DEV__ 
-  ? (Platform.OS === 'ios' ? 'http://localhost:3000' : 'http://10.0.2.2:3000')
+  ? (Platform.OS === 'ios' ? config.apiUrl : 'http://10.0.2.2:3000')
   : 'https://your-production-api.com';
 
 export interface ApiResponse<T = any> {

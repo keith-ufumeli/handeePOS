@@ -150,7 +150,7 @@ class AuthService {
   /**
    * Generate password reset token
    */
-  async generatePasswordResetToken(user: IUser): Promise<string> {
+  async generatePasswordResetToken(_user: IUser): Promise<string> {
     const resetToken = crypto.randomBytes(32).toString('hex');
     return resetToken;
   }

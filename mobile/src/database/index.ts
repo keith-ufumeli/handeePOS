@@ -9,8 +9,8 @@ import SyncQueue from './models/SyncQueue';
 // Create the adapter
 const adapter = new SQLiteAdapter({
   schema,
-  // Optional: Enable JSI for better performance
-  jsi: true,
+  // Disable JSI for development to avoid initialization errors
+  jsi: false,
   // Optional: Enable FTS (Full Text Search) for better search performance
   onSetUpError: (error) => {
     console.error('Database setup error:', error);
