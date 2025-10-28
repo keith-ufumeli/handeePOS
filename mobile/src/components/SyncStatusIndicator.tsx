@@ -8,7 +8,7 @@ import {
   Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSyncStore } from '@/stores/syncStore';
+import { useSyncStore } from '../stores/syncStore';
 
 interface SyncStatusIndicatorProps {
   onPress?: () => void;

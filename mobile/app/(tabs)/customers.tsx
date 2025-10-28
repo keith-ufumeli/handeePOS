@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCustomerStore } from '@/stores/customerStore';
-import { useAuthStore } from '@/stores/authStore';
+import { useCustomerStore } from '../../src/stores/customerStore';
+import { useAuthStore } from '../../src/stores/authStore';
 
 interface Customer {
   _id: string;

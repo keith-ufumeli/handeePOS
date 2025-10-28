@@ -11,8 +11,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useReportStore } from '@/stores/reportStore';
-import { useAuthStore } from '@/stores/authStore';
+import { useReportStore } from '../../src/stores/reportStore';
+import { useAuthStore } from '../../src/stores/authStore';
 
 const { width } = Dimensions.get('window');
 

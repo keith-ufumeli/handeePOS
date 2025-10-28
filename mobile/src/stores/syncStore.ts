@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import apiService from '@/services/apiService';
+import apiService from '../services/apiService';
 import { useOrderStore } from './orderStore';
 import { useProductStore } from './productStore';
 import { useCustomerStore } from './customerStore';

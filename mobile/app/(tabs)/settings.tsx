@@ -12,7 +12,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { useSettingsStore } from '../../src/stores/settingsStore';
 
 interface StoreSettings {
   _id: string;

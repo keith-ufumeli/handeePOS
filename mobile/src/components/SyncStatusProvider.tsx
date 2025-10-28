@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNetInfo } from '@react-native-community/netinfo';
-import { useSyncStore } from '@/stores/syncStore';
+import { useSyncStore } from '../stores/syncStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
 
 interface SyncStatusProviderProps {
