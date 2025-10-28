@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '../../components/themed-view';
 import { ThemedText } from '../../components/themed-text';
@@ -9,11 +9,12 @@ export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const { login, error, isLoading, clearError } = useAuthStore();
 
   const handleLogin = async () => {
     try {
-      await login(email, password);
+      await login(email, password, rememberMe);
       // The root index will handle the redirect after successful login
     } catch (err) {
       console.error('Login error:', err);
@@ -56,6 +57,25 @@ export default function LoginScreen() {
       >
         <ThemedText style={styles.buttonText}>
           {isLoading ? 'Logging in...' : 'Login'}
+        </ThemedText>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.rememberMeContainer}
+        onPress={() => setRememberMe(!rememberMe)}
+      >
+        <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]} />
+        <ThemedText>Remember me</ThemedText>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={() => {
+          clearError();
+          router.push('/(auth)/forgot-password' as any);
+        }}
+      >
+        <ThemedText type="link" style={styles.forgotPassword}>
+          Forgot password?
         </ThemedText>
       </TouchableOpacity>
 
@@ -108,6 +128,27 @@ const styles = StyleSheet.create({
   error: {
     color: '#ff3b30',
     marginBottom: 20,
+    textAlign: 'center',
+  },
+  rememberMeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: '#0a7ea4',
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  checkboxChecked: {
+    backgroundColor: '#0a7ea4',
+  },
+  forgotPassword: {
+    marginBottom: 10,
     textAlign: 'center',
   },
   registerLink: {
