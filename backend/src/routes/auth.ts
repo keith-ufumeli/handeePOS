@@ -3,7 +3,8 @@ import { authLimiter } from '@/middleware/rateLimiter';
 import { authenticate } from '@/middleware/auth';
 import authController from '@/controllers/authController';
 import { 
-  validateLogin, 
+  validateLogin,
+  validateRegister, 
   validateRefreshToken, 
   validateChangePassword 
 } from '@/middleware/validation';
@@ -12,6 +13,61 @@ const router = Router();
 
 // Apply authentication rate limiting
 router.use(authLimiter);
+
+/**
+ * @swagger
+ * /api/auth/register:
+ *   post:
+ *     summary: User registration
+ *     description: Register a new user account
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fullName
+ *               - email
+ *               - password
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *                 description: User's full name
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User's email address
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 description: User's password
+ *     responses:
+ *       201:
+ *         description: Registration successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ *                     tokens:
+ *                       $ref: '#/components/schemas/AuthTokens'
+ *       400:
+ *         description: Validation error or email already registered
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/register', validateRegister, authController.register);
 
 /**
  * @swagger

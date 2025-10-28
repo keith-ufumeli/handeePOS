@@ -7,9 +7,10 @@
     "emitDecoratorMetadata": true,
     "paths": {
       "@/*": [
-        "./src/*"
+        "./*"
       ]
     },
+    "baseUrl": ".",
     "forceConsistentCasingInFileNames": true
   },
   "include": [

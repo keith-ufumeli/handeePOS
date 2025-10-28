@@ -54,7 +54,7 @@ export const validateChangePassword: ValidationChain[] = [
 /**
  * User registration validation rules
  */
-export const validateUserRegistration: ValidationChain[] = [
+export const validateRegister: ValidationChain[] = [
   body('email')
     .isEmail()
     .withMessage('Please provide a valid email')
@@ -71,14 +71,6 @@ export const validateUserRegistration: ValidationChain[] = [
     .isLength({ min: 2, max: 100 })
     .withMessage('Full name must be between 2 and 100 characters')
     .trim(),
-  
-  body('role')
-    .isIn(['admin', 'manager', 'cashier', 'inventory'])
-    .withMessage('Role must be one of: admin, manager, cashier, inventory'),
-  
-  body('storeId')
-    .isMongoId()
-    .withMessage('Store ID must be a valid MongoDB ObjectId'),
   
   body('phoneNumber')
     .optional()

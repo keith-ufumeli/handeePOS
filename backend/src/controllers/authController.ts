@@ -6,6 +6,76 @@ import { validationResult } from 'express-validator';
 
 export class AuthController {
   /**
+   * User registration
+   */
+  async register(req: Request, res: Response): Promise<void> {
+    try {
+      // Check validation errors
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array()
+        });
+        return;
+      }
+
+      const { fullName, email, password } = req.body;
+
+      // Check if user already exists
+      const existingUser = await User.findOne({ email: email.toLowerCase() });
+      if (existingUser) {
+        res.status(400).json({
+          success: false,
+          message: 'Email already registered'
+        });
+        return;
+      }
+
+      // Hash password
+      const passwordHash = await authService.hashPassword(password);
+
+      // Create new user
+      const user = await User.create({
+        email: email.toLowerCase(),
+        passwordHash,
+        fullName,
+        role: 'user', // Default role
+        permissions: ['basic_access'], // Default permissions
+        isActive: true
+      });
+
+      logger.info(`New user registered: ${user.email}`);
+
+      // Generate tokens
+      const tokens = authService.generateTokens(user);
+
+      res.status(201).json({
+        success: true,
+        message: 'Registration successful',
+        data: {
+          user: {
+            id: user._id,
+            email: user.email,
+            fullName: user.fullName,
+            role: user.role,
+            permissions: user.permissions
+          },
+          tokens
+        }
+      });
+
+    } catch (error) {
+      logger.error('Registration error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+
+  /**
    * User login
    */
   async login(req: Request, res: Response): Promise<void> {
@@ -116,7 +186,7 @@ export class AuthController {
         userId: user._id.toString(),
         email: user.email,
         role: user.role,
-        storeId: user.storeId.toString(),
+        storeId: user.storeId?.toString() || '',
         permissions: user.permissions
       });
 

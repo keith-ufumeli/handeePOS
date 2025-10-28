@@ -57,6 +57,13 @@ class ApiService {
   }
 
   // Auth endpoints
+  async register(data: { fullName: string; email: string; password: string }) {
+    return this.makeRequest('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async login(email: string, password: string) {
     return this.makeRequest('/api/auth/login', {
       method: 'POST',
