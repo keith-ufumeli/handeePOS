@@ -38,6 +38,14 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "@nozbe/watermelondb",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
       ]
     ],
     "experiments": {

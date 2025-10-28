@@ -10,7 +10,7 @@ let databaseError: Error | null = null;
 
 try {
   // Test database connection
-  database.adapter.schema;
+  const _ = database.adapter.schema;
   isDatabaseReady = true;
 } catch (error) {
   console.warn('Database not ready:', error);
