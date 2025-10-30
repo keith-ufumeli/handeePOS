@@ -8,7 +8,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "useFrameworks": "static"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.HandeePOS"
     },
     "web": {
       "output": "static",
@@ -36,14 +38,6 @@
           "backgroundColor": "#ffffff",
           "dark": {
             "backgroundColor": "#000000"
-          }
-        }
-      ],
-      [
-        "@nozbe/watermelondb",
-        {
-          "ios": {
-            "useFrameworks": "static"
           }
         }
       ]
