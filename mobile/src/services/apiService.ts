@@ -44,17 +44,101 @@ class ApiService {
       ...options.headers,
     };
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
+    console.log('[API_SERVICE] Making HTTP request', {
+      url,
+      method: options.method || 'GET',
+      hasAuthToken: !!this.authToken,
+      hasBody: !!options.body
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
-    }
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
 
-    return response.json();
+      console.log('[API_SERVICE] HTTP response received', {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[API_SERVICE] HTTP error response', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData
+        });
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('[API_SERVICE] Response parsed successfully', {
+        url,
+        hasData: !!data
+      });
+      return data;
+    } catch (error) {
+      // Enhanced error logging for network errors
+      const errorDetails: any = {
+        url,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+      };
+
+      // Try to extract more details from the error
+      if (error instanceof Error) {
+        errorDetails.errorName = error.name;
+        errorDetails.errorStack = error.stack;
+        
+        // Check for network-specific error properties
+        if ('cause' in error) {
+          errorDetails.errorCause = error.cause;
+        }
+        
+        // For TypeErrors (often network errors)
+        if (error instanceof TypeError) {
+          errorDetails.isNetworkError = true;
+          errorDetails.networkErrorDetails = {
+            message: error.message,
+            code: (error as any).code,
+            errno: (error as any).errno,
+            syscall: (error as any).syscall,
+            address: (error as any).address,
+            port: (error as any).port
+          };
+        }
+      }
+
+      // Log the full error object
+      console.error('[API_SERVICE] Request error details:', JSON.stringify(errorDetails, null, 2));
+      console.error('[API_SERVICE] Raw error object:', error);
+      
+      // Also log individual properties
+      if (error instanceof Error) {
+        console.error('[API_SERVICE] Error properties:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack?.substring(0, 500) // First 500 chars of stack
+        });
+      }
+
+      // Create a more descriptive error message
+      let errorMessage = 'Network request failed';
+      if (error instanceof TypeError && error.message.includes('Network request failed')) {
+        errorMessage = `Cannot connect to server at ${url}. Please check:\n1. Backend server is running\n2. Correct IP address (${this.baseUrl})\n3. Network connectivity\n4. Firewall settings`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      const enhancedError = new Error(errorMessage);
+      if (error instanceof Error && error.stack) {
+        enhancedError.stack = error.stack;
+      }
+      throw enhancedError;
+    }
   }
 
   // Auth endpoints
@@ -66,10 +150,63 @@ class ApiService {
   }
 
   async login(email: string, password: string, rememberMe: boolean = false) {
-    return this.makeRequest('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, rememberMe }),
+    console.log('[API_SERVICE] Login request initiated', {
+      email,
+      rememberMe,
+      baseUrl: this.baseUrl,
+      endpoint: '/api/auth/login'
     });
+
+    try {
+      const url = `${this.baseUrl}/api/auth/login`;
+      console.log('[API_SERVICE] Making request to:', url);
+
+      const requestBody = { email, password, rememberMe };
+      console.log('[API_SERVICE] Request body prepared', {
+        email: requestBody.email,
+        rememberMe: requestBody.rememberMe,
+        hasPassword: !!requestBody.password
+      });
+
+      const response = await this.makeRequest('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+
+      console.log('[API_SERVICE] Login response received', {
+        success: response.success,
+        hasData: !!response.data,
+        message: response.message
+      });
+
+      return response;
+    } catch (error) {
+      // Enhanced error logging with full error details
+      const errorInfo: any = {
+        baseUrl: this.baseUrl,
+        endpoint: '/api/auth/login',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+      };
+
+      if (error instanceof Error) {
+        errorInfo.errorName = error.name;
+        errorInfo.errorStack = error.stack?.substring(0, 1000); // First 1000 chars
+        
+        if (error instanceof TypeError) {
+          errorInfo.isNetworkError = true;
+          errorInfo.networkDetails = {
+            message: error.message,
+            code: (error as any).code,
+          };
+        }
+      }
+
+      console.error('[API_SERVICE] Login request failed:', JSON.stringify(errorInfo, null, 2));
+      console.error('[API_SERVICE] Full error object:', error);
+      
+      throw error;
+    }
   }
 
   async forgotPassword(email: string) {

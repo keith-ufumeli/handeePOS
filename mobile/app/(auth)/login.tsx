@@ -13,11 +13,24 @@ export default function LoginScreen() {
   const { login, error, isLoading, clearError } = useAuthStore();
 
   const handleLogin = async () => {
+    console.log('[LOGIN_SCREEN] Login attempt started', {
+      email,
+      rememberMe,
+      hasPassword: !!password,
+      passwordLength: password.length
+    });
+
     try {
+      console.log('[LOGIN_SCREEN] Calling login function from authStore');
       await login(email, password, rememberMe);
+      console.log('[LOGIN_SCREEN] Login function completed successfully');
       // The root index will handle the redirect after successful login
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('[LOGIN_SCREEN] Login error caught:', {
+        error: err instanceof Error ? err.message : String(err),
+        errorType: err instanceof Error ? err.constructor.name : typeof err,
+        stack: err instanceof Error ? err.stack : undefined
+      });
     }
   };
 

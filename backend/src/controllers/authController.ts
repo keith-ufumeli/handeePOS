@@ -80,9 +80,17 @@ export class AuthController {
    */
   async login(req: Request, res: Response): Promise<void> {
     try {
+      logger.info('[AUTH] Login request received', {
+        email: req.body.email,
+        rememberMe: req.body.rememberMe,
+        ip: req.ip,
+        userAgent: req.get('user-agent')
+      });
+
       // Check validation errors
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        logger.warn('[AUTH] Login validation failed', { errors: errors.array() });
         res.status(400).json({
           success: false,
           message: 'Validation failed',
@@ -92,6 +100,7 @@ export class AuthController {
       }
 
       const { email, password, rememberMe = false } = req.body;
+      logger.info('[AUTH] Processing login for email:', email.toLowerCase());
 
       // Find user by email
       const user = await User.findOne({ 
@@ -100,16 +109,20 @@ export class AuthController {
       }).populate('storeId');
 
       if (!user) {
+        logger.warn('[AUTH] Login failed - user not found or inactive', { email: email.toLowerCase() });
         res.status(401).json({
           success: false,
           message: 'Invalid email or password'
         });
         return;
       }
+
+      logger.info('[AUTH] User found, verifying password', { userId: user._id, email: user.email });
 
       // Verify password
       const isPasswordValid = await authService.comparePassword(password, user.passwordHash);
       if (!isPasswordValid) {
+        logger.warn('[AUTH] Login failed - invalid password', { userId: user._id, email: user.email });
         res.status(401).json({
           success: false,
           message: 'Invalid email or password'
@@ -117,14 +130,26 @@ export class AuthController {
         return;
       }
 
+      logger.info('[AUTH] Password verified, generating tokens', { userId: user._id, rememberMe });
+
       // Generate tokens with remember me option
       const tokens = authService.generateTokens(user, rememberMe);
+      logger.info('[AUTH] Tokens generated successfully', { 
+        userId: user._id,
+        hasAccessToken: !!tokens.accessToken,
+        hasRefreshToken: !!tokens.refreshToken
+      });
 
       // Update last login
       user.lastLogin = new Date();
       await user.save();
 
-      logger.info(`User ${user.email} logged in successfully`);
+      logger.info('[AUTH] User logged in successfully', {
+        userId: user._id,
+        email: user.email,
+        role: user.role,
+        storeId: user.storeId?._id || user.storeId
+      });
 
       res.status(200).json({
         success: true,
@@ -145,7 +170,11 @@ export class AuthController {
       });
 
     } catch (error) {
-      logger.error('Login error:', error);
+      logger.error('[AUTH] Login error:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        email: req.body?.email
+      });
       res.status(500).json({
         success: false,
         message: 'Internal server error'
@@ -158,9 +187,15 @@ export class AuthController {
    */
   async refreshToken(req: Request, res: Response): Promise<void> {
     try {
+      logger.info('[AUTH] Refresh token request received', {
+        hasRefreshToken: !!req.body.refreshToken,
+        ip: req.ip
+      });
+
       const { refreshToken } = req.body;
 
       if (!refreshToken) {
+        logger.warn('[AUTH] Refresh token missing in request');
         res.status(400).json({
           success: false,
           message: 'Refresh token is required'
@@ -168,18 +203,31 @@ export class AuthController {
         return;
       }
 
+      logger.info('[AUTH] Verifying refresh token');
       // Verify refresh token
       const payload = authService.verifyRefreshToken(refreshToken);
+      logger.info('[AUTH] Refresh token verified', {
+        userId: payload.userId,
+        email: payload.email
+      });
 
       // Find user to ensure they still exist and are active
       const user = await User.findById(payload.userId).populate('storeId');
       if (!user || !user.isActive) {
+        logger.warn('[AUTH] Refresh token failed - user not found or inactive', {
+          userId: payload.userId
+        });
         res.status(401).json({
           success: false,
           message: 'User not found or inactive'
         });
         return;
       }
+
+      logger.info('[AUTH] User found, generating new access token', {
+        userId: user._id,
+        email: user.email
+      });
 
       // Generate new access token
       const newAccessToken = authService.generateAccessToken({
@@ -190,7 +238,11 @@ export class AuthController {
         permissions: user.permissions
       });
 
-      logger.info(`Token refreshed for user ${user.email}`);
+      logger.info('[AUTH] Token refreshed successfully', {
+        userId: user._id,
+        email: user.email,
+        hasAccessToken: !!newAccessToken
+      });
 
       res.status(200).json({
         success: true,
@@ -201,7 +253,10 @@ export class AuthController {
       });
 
     } catch (error) {
-      logger.error('Token refresh error:', error);
+      logger.error('[AUTH] Token refresh error:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       res.status(401).json({
         success: false,
         message: 'Invalid refresh token'

@@ -37,7 +37,15 @@ class AuthService {
    * Compare password with hash
    */
   async comparePassword(password: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(password, hash);
+    logger.info('[AUTH_SERVICE] Comparing password');
+    try {
+      const isValid = await bcrypt.compare(password, hash);
+      logger.info('[AUTH_SERVICE] Password comparison result:', { isValid });
+      return isValid;
+    } catch (error) {
+      logger.error('[AUTH_SERVICE] Password comparison error:', error);
+      throw error;
+    }
   }
 
   /**
@@ -66,6 +74,12 @@ class AuthService {
    * Generate both access and refresh tokens
    */
   generateTokens(user: IUser, rememberMe: boolean = false): AuthTokens {
+    logger.info('[AUTH_SERVICE] Generating tokens', {
+      userId: user._id.toString(),
+      email: user.email,
+      rememberMe
+    });
+
     const payload: TokenPayload = {
       userId: user._id.toString(),
       email: user.email,
@@ -74,21 +88,43 @@ class AuthService {
       permissions: user.permissions
     };
 
-    return {
-      accessToken: this.generateAccessToken(payload, rememberMe),
-      refreshToken: this.generateRefreshToken(payload, rememberMe)
-    };
+    try {
+      const accessToken = this.generateAccessToken(payload, rememberMe);
+      const refreshToken = this.generateRefreshToken(payload, rememberMe);
+      
+      logger.info('[AUTH_SERVICE] Tokens generated successfully', {
+        accessTokenLength: accessToken.length,
+        refreshTokenLength: refreshToken.length,
+        expiresIn: rememberMe ? this.ACCESS_TOKEN_EXPIRES_IN_REMEMBERED : this.ACCESS_TOKEN_EXPIRES_IN
+      });
+
+      return {
+        accessToken,
+        refreshToken
+      };
+    } catch (error) {
+      logger.error('[AUTH_SERVICE] Token generation error:', error);
+      throw error;
+    }
   }
 
   /**
    * Verify access token
    */
   verifyAccessToken(token: string): TokenPayload {
+    logger.info('[AUTH_SERVICE] Verifying access token');
     try {
       const decoded = jwt.verify(token, this.JWT_SECRET) as TokenPayload;
+      logger.info('[AUTH_SERVICE] Access token verified successfully', {
+        userId: decoded.userId,
+        email: decoded.email
+      });
       return decoded;
     } catch (error) {
-      logger.error('Access token verification failed:', error);
+      logger.error('[AUTH_SERVICE] Access token verification failed:', {
+        error: error instanceof Error ? error.message : String(error),
+        tokenLength: token.length
+      });
       throw new Error('Invalid access token');
     }
   }
@@ -97,11 +133,19 @@ class AuthService {
    * Verify refresh token
    */
   verifyRefreshToken(token: string): TokenPayload {
+    logger.info('[AUTH_SERVICE] Verifying refresh token');
     try {
       const decoded = jwt.verify(token, this.JWT_REFRESH_SECRET) as TokenPayload;
+      logger.info('[AUTH_SERVICE] Refresh token verified successfully', {
+        userId: decoded.userId,
+        email: decoded.email
+      });
       return decoded;
     } catch (error) {
-      logger.error('Refresh token verification failed:', error);
+      logger.error('[AUTH_SERVICE] Refresh token verification failed:', {
+        error: error instanceof Error ? error.message : String(error),
+        tokenLength: token.length
+      });
       throw new Error('Invalid refresh token');
     }
   }
