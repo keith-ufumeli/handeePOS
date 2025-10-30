@@ -7,20 +7,20 @@ import dotenv from 'dotenv';
 import swaggerUi from 'swagger-ui-express';
 
 // Import database connection
-import connectDB from '@/config/database';
-import { swaggerSpec } from '@/config/swagger';
+import connectDB from './config/database';
+import { swaggerSpec } from './config/swagger';
 
 // Import routes
-import indexRoutes from '@/routes/index';
-import authRoutes from '@/routes/auth';
-import productRoutes from '@/routes/products';
-import orderRoutes from '@/routes/orders';
-import customerRoutes from '@/routes/customers';
-import reportRoutes from '@/routes/reports';
-import settingsRoutes from '@/routes/settings';
+import indexRoutes from './routes/index';
+import authRoutes from './routes/auth';
+import productRoutes from './routes/products';
+import orderRoutes from './routes/orders';
+import customerRoutes from './routes/customers';
+import reportRoutes from './routes/reports';
+import settingsRoutes from './routes/settings';
 
 // Import error handling middleware
-import { errorHandler, notFound } from '@/middleware/errorHandler';
+import { errorHandler, notFound } from './middleware/errorHandler';
 
 // Load environment variables based on NODE_ENV
 const envFile = process.env['NODE_ENV'] === 'production' ? '.env.prod' : '.env.local';

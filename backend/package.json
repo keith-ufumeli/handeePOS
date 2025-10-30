@@ -5,7 +5,7 @@
   "main": "src/app.ts",
   "scripts": {
     "dev": "nodemon src/app.ts",
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "start": "node src/app.ts",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -78,6 +78,7 @@
     "supertest": "^6.3.3",
     "ts-jest": "^29.1.1",
     "ts-node": "^10.9.1",
+    "tsc-alias": "^1.8.16",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.3.3"
   },
