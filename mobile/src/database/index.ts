@@ -1,4 +1,5 @@
 import { Database } from '@nozbe/watermelondb';
+import { Platform } from 'react-native';
 import SQLiteAdapter from '@nozbe/watermelondb/adapters/sqlite';
 import schema from './schema';
 import Product from './models/Product';
@@ -6,14 +7,18 @@ import Category from './models/Category';
 import Order from './models/Order';
 import SyncQueue from './models/SyncQueue';
 
+
 let database: Database;
 
 try {
   // Create the adapter
+  const isNative = Platform.OS === 'android' || Platform.OS === 'ios';
+  console.log('isNative', isNative);
+  console.log('Platform.OS', Platform.OS);
   const adapter = new SQLiteAdapter({
     schema,
-    // Use JSI for better performance (will fallback to JS if not available)
-    jsi: true,
+    // Enable JSI only on real native (Android/iOS); disable elsewhere to avoid null initializeJSI errors
+    jsi: isNative,
     // Optional: Enable FTS (Full Text Search) for better search performance
     onSetUpError: (error) => {
       console.error('Database setup error:', error);
