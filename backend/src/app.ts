@@ -98,10 +98,10 @@ const startServer = async () => {
     await connectDB();
     
     // Start server
-    app.listen(PORT, 'localhost', () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 HandeePOS Backend running on port ${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/health`);
-      console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
+      console.log(`📊 Health check: http://0.0.0.0:${PORT}/health`);
+      console.log(`📚 API Documentation: http://0.0.0.0:${PORT}/api-docs`);
       console.log(`🌍 Environment: ${process.env['NODE_ENV'] || 'development'}`);
     });
   } catch (error) {
