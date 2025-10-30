@@ -2,11 +2,11 @@
   "name": "handeepos-backend",
   "version": "1.0.0",
   "description": "Express.js backend server for HandeePOS point-of-sale system",
-  "main": "dist/app.js",
+  "main": "src/app.ts",
   "scripts": {
     "dev": "nodemon src/app.ts",
     "build": "tsc",
-    "start": "node dist/app.js",
+    "start": "node src/app.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

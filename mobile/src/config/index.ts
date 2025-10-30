@@ -1,5 +1,5 @@
 export const config = {
-  apiUrl: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000',
+  apiUrl: process.env.EXPO_PUBLIC_API_URL || 'https://handeepos.onrender.com',
   syncInterval: 30000, // 30 seconds
   maxRetries: 3,
   timeout: 10000, // 10 seconds
