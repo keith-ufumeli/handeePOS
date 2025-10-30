@@ -22,7 +22,7 @@ const swaggerDefinition: SwaggerDefinition = {
       description: 'Development server'
     },
     {
-      url: 'https://api.handeepos.com',
+      url: 'https://handeepos.onrender.com',
       description: 'Production server'
     }
   ],
