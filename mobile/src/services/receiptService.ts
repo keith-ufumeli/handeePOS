@@ -1,5 +1,5 @@
 import { CartItem } from '../stores/cartStore';
-import Order from '../database/models/Order';
+import { Order } from '../database/types';
 
 export interface ReceiptData {
   orderNumber: string;
@@ -36,12 +36,13 @@ export class ReceiptService {
       date: now.toLocaleDateString(),
       time: now.toLocaleTimeString(),
       cashier: order.cashierId,
-      items: order.orderItems,
+      items: order.orderItems || [],
       subtotal: order.subtotal,
       discountAmount: order.discountAmount,
       taxAmount: order.taxAmount,
       total: order.total,
-      paymentMethods: order.paymentMethods,
+      paymentMethods: order.paymentMethods || [],
+      // TODO: Get store info from server
       storeInfo: {
         name: 'HandeePOS Store',
         address: '123 Main Street, City, State 12345',

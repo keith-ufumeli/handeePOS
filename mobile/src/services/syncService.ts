@@ -1,21 +1,8 @@
-import database from '../database';
-import Product from '../database/models/Product';
-import Category from '../database/models/Category';
-import SyncQueue, { SyncOperation } from '../database/models/SyncQueue';
-import { Q } from '@nozbe/watermelondb';
-
-// Add error handling for database initialization
-let isDatabaseReady = false;
-let databaseError: Error | null = null;
-
-try {
-  // Test database connection
-  const _ = database.adapter.schema;
-  isDatabaseReady = true;
-} catch (error) {
-  console.warn('Database not ready:', error);
-  databaseError = error as Error;
-}
+import * as dbHelpers from '../database/db-helpers';
+import { SyncOperation, SyncQueueItem } from '../database/types';
+import { getDatabase, generateId } from '../database';
+import { products, categories, syncQueue } from '../database/schema';
+import { eq } from 'drizzle-orm';
 
 export interface SyncResult {
   success: boolean;
@@ -34,14 +21,6 @@ class SyncService {
 
   setAuthToken(token: string) {
     this.authToken = token;
-  }
-
-  private checkDatabaseReady(): boolean {
-    if (!isDatabaseReady) {
-      console.warn('Database not ready, skipping sync operation');
-      return false;
-    }
-    return true;
   }
 
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
@@ -75,26 +54,31 @@ class SyncService {
       errors: [],
     };
 
-    if (!this.checkDatabaseReady()) {
-      result.success = false;
-      result.errors.push('Database not ready');
-      return result;
-    }
-
     try {
       // Get all pending sync queue items
-      const pendingItems = await database.collections
-        .get<SyncQueue>('sync_queue')
-        .query(Q.where('status', 'pending'))
-        .fetch();
+      const pendingItems = await dbHelpers.getPendingSyncItems();
 
       for (const item of pendingItems) {
         try {
+          // Mark as syncing
+          await dbHelpers.updateSyncQueueItem(item.id, { status: 'syncing' });
+
           await this.syncQueueItem(item);
           result.syncedCount++;
+
+          // Mark as completed
+          await dbHelpers.updateSyncQueueItem(item.id, { status: 'completed' });
         } catch (error) {
           result.failedCount++;
-          result.errors.push(`Failed to sync ${item.collection} ${item.documentId}: ${error}`);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          result.errors.push(`Failed to sync ${item.collection} ${item.documentId}: ${errorMessage}`);
+          
+          // Mark as failed and increment retry count
+          await dbHelpers.updateSyncQueueItem(item.id, {
+            status: 'failed',
+            retryCount: item.retryCount + 1,
+            errorMessage,
+          });
           console.error('Sync error:', error);
         }
       }
@@ -112,47 +96,21 @@ class SyncService {
   /**
    * Sync a single queue item
    */
-  private async syncQueueItem(item: SyncQueue): Promise<void> {
-    // Mark as syncing
-    await database.write(async () => {
-      await item.update((record) => {
-        record.status = 'syncing';
-      });
-    });
-
-    try {
-      const data = item.syncData;
-      
-      switch (item.collectionName) {
-        case 'products':
-          await this.syncProduct(item.operation, data);
-          break;
-        case 'categories':
-          await this.syncCategory(item.operation, data);
-          break;
-        case 'orders':
-          await this.syncOrder(item.operation, data);
-          break;
-        default:
-          throw new Error(`Unknown collection: ${item.collection}`);
-      }
-
-      // Mark as completed
-      await database.write(async () => {
-        await item.update((record) => {
-          record.status = 'completed';
-        });
-      });
-    } catch (error) {
-      // Mark as failed and increment retry count
-      await database.write(async () => {
-        await item.update((record) => {
-          record.status = 'failed';
-          record.retryCount += 1;
-          record.errorMessage = error instanceof Error ? error.message : String(error);
-        });
-      });
-      throw error;
+  private async syncQueueItem(item: SyncQueueItem): Promise<void> {
+    const data = item.syncData;
+    
+    switch (item.collection) {
+      case 'products':
+        await this.syncProduct(item.operation, data);
+        break;
+      case 'categories':
+        await this.syncCategory(item.operation, data);
+        break;
+      case 'orders':
+        await this.syncOrder(item.operation, data);
+        break;
+      default:
+        throw new Error(`Unknown collection: ${item.collection}`);
     }
   }
 
@@ -168,13 +126,13 @@ class SyncService {
         });
         break;
       case 'update':
-        await this.makeRequest(`/api/products/${data.serverId}`, {
+        await this.makeRequest(`/api/products/${data.serverId || data.id}`, {
           method: 'PUT',
           body: JSON.stringify(data),
         });
         break;
       case 'delete':
-        await this.makeRequest(`/api/products/${data.serverId}`, {
+        await this.makeRequest(`/api/products/${data.serverId || data.id}`, {
           method: 'DELETE',
         });
         break;
@@ -193,13 +151,13 @@ class SyncService {
         });
         break;
       case 'update':
-        await this.makeRequest(`/api/products/categories/${data.serverId}`, {
+        await this.makeRequest(`/api/products/categories/${data.serverId || data.id}`, {
           method: 'PUT',
           body: JSON.stringify(data),
         });
         break;
       case 'delete':
-        await this.makeRequest(`/api/products/categories/${data.serverId}`, {
+        await this.makeRequest(`/api/products/categories/${data.serverId || data.id}`, {
           method: 'DELETE',
         });
         break;
@@ -218,13 +176,13 @@ class SyncService {
         });
         break;
       case 'update':
-        await this.makeRequest(`/api/orders/${data.serverId}`, {
+        await this.makeRequest(`/api/orders/${data.serverId || data.id}`, {
           method: 'PUT',
           body: JSON.stringify(data),
         });
         break;
       case 'delete':
-        await this.makeRequest(`/api/orders/${data.serverId}`, {
+        await this.makeRequest(`/api/orders/${data.serverId || data.id}`, {
           method: 'DELETE',
         });
         break;
@@ -235,107 +193,117 @@ class SyncService {
    * Pull latest data from server
    */
   private async pullFromServer(): Promise<void> {
-    // Pull products
-    const productsResponse = await this.makeRequest('/api/products');
-    await this.updateLocalProducts(productsResponse.data);
+    try {
+      // Pull products
+      const productsResponse = await this.makeRequest('/api/products');
+      if (productsResponse.success && productsResponse.data) {
+        await this.updateLocalProducts(productsResponse.data);
+      }
 
-    // Pull categories
-    const categoriesResponse = await this.makeRequest('/api/products/categories');
-    await this.updateLocalCategories(categoriesResponse.data);
-
-    // Pull orders (if needed)
-    // const ordersResponse = await this.makeRequest('/api/orders');
-    // await this.updateLocalOrders(ordersResponse.data);
+      // Pull categories
+      const categoriesResponse = await this.makeRequest('/api/products/categories');
+      if (categoriesResponse.success && categoriesResponse.data) {
+        await this.updateLocalCategories(categoriesResponse.data);
+      }
+    } catch (error) {
+      console.error('Error pulling from server:', error);
+      // Don't throw - allow sync to continue even if pull fails
+    }
   }
 
   /**
    * Update local products with server data
    */
   private async updateLocalProducts(serverProducts: any[]): Promise<void> {
-    await database.write(async () => {
-      for (const serverProduct of serverProducts) {
-        // Check if product exists locally
-        const existingProduct = await database.collections
-          .get<Product>('products')
-          .query(Q.where('server_id', serverProduct._id))
-          .fetch();
+    const db = await getDatabase();
+    
+    for (const serverProduct of serverProducts) {
+      try {
+        // Check if product exists locally by server_id
+        const existingProducts = await db.select().from(products)
+          .where(eq(products.serverId, serverProduct._id || serverProduct.id))
+          .limit(1);
 
-        if (existingProduct.length > 0) {
+        const productData = {
+          name: serverProduct.name,
+          sku: serverProduct.sku,
+          barcode: serverProduct.barcode || null,
+          categoryId: serverProduct.categoryId || serverProduct.category_id || '',
+          price: serverProduct.price,
+          cost: serverProduct.cost || 0,
+          taxRate: serverProduct.taxRate || serverProduct.tax_rate || 0,
+          stockQuantity: serverProduct.stockQuantity || serverProduct.stock_quantity || 0,
+          lowStockThreshold: serverProduct.lowStockThreshold || serverProduct.low_stock_threshold || 5,
+          unit: serverProduct.unit || 'pcs',
+          images: serverProduct.images ? JSON.stringify(serverProduct.images) : null,
+          isActive: serverProduct.isActive !== false,
+          syncStatus: 'synced',
+          lastSyncedAt: Date.now(),
+          serverId: serverProduct._id || serverProduct.id,
+          updatedAt: new Date(),
+        };
+
+        if (existingProducts.length > 0) {
           // Update existing product
-          await existingProduct[0].update((product) => {
-            product.name = serverProduct.name;
-            product.sku = serverProduct.sku;
-            product.barcode = serverProduct.barcode;
-            product.categoryId = serverProduct.categoryId;
-            product.price = serverProduct.price;
-            product.cost = serverProduct.cost;
-            product.taxRate = serverProduct.taxRate;
-            product.stockQuantity = serverProduct.stockQuantity;
-            product.lowStockThreshold = serverProduct.lowStockThreshold;
-            product.unit = serverProduct.unit;
-            product.images = serverProduct.images ? JSON.stringify(serverProduct.images) : undefined;
-            product.isActive = serverProduct.isActive;
-            product.syncStatusValue = 'synced';
-            product.lastSyncedAt = Date.now();
-          });
+          await db.update(products)
+            .set(productData)
+            .where(eq(products.id, existingProducts[0].id));
         } else {
           // Create new product
-          await database.collections.get<Product>('products').create((product) => {
-            product.name = serverProduct.name;
-            product.sku = serverProduct.sku;
-            product.barcode = serverProduct.barcode;
-            product.categoryId = serverProduct.categoryId;
-            product.price = serverProduct.price;
-            product.cost = serverProduct.cost;
-            product.taxRate = serverProduct.taxRate;
-            product.stockQuantity = serverProduct.stockQuantity;
-            product.lowStockThreshold = serverProduct.lowStockThreshold;
-            product.unit = serverProduct.unit;
-            product.images = serverProduct.images ? JSON.stringify(serverProduct.images) : undefined;
-            product.isActive = serverProduct.isActive;
-            product.syncStatusValue = 'synced';
-            product.serverId = serverProduct._id;
-            product.lastSyncedAt = Date.now();
+          const id = await generateId();
+          await db.insert(products).values({
+            id,
+            ...productData,
+            createdAt: new Date(),
           });
         }
+      } catch (error) {
+        console.error('Error updating product:', error);
       }
-    });
+    }
   }
 
   /**
    * Update local categories with server data
    */
   private async updateLocalCategories(serverCategories: any[]): Promise<void> {
-    await database.write(async () => {
-      for (const serverCategory of serverCategories) {
-        // Check if category exists locally
-        const existingCategory = await database.collections
-          .get<Category>('categories')
-          .query(Q.where('server_id', serverCategory._id))
-          .fetch();
+    const db = await getDatabase();
+    
+    for (const serverCategory of serverCategories) {
+      try {
+        // Check if category exists locally by server_id
+        const existingCategories = await db.select().from(categories)
+          .where(eq(categories.serverId, serverCategory._id || serverCategory.id))
+          .limit(1);
 
-        if (existingCategory.length > 0) {
+        const categoryData = {
+          name: serverCategory.name,
+          description: serverCategory.description || null,
+          isActive: serverCategory.isActive !== false,
+          syncStatus: 'synced',
+          lastSyncedAt: Date.now(),
+          serverId: serverCategory._id || serverCategory.id,
+          updatedAt: new Date(),
+        };
+
+        if (existingCategories.length > 0) {
           // Update existing category
-          await existingCategory[0].update((category) => {
-            category.name = serverCategory.name;
-            category.description = serverCategory.description;
-            category.isActive = serverCategory.isActive;
-            category.syncStatusValue = 'synced';
-            category.lastSyncedAt = Date.now();
-          });
+          await db.update(categories)
+            .set(categoryData)
+            .where(eq(categories.id, existingCategories[0].id));
         } else {
           // Create new category
-          await database.collections.get<Category>('categories').create((category) => {
-            category.name = serverCategory.name;
-            category.description = serverCategory.description;
-            category.isActive = serverCategory.isActive;
-            category.syncStatusValue = 'synced';
-            category.serverId = serverCategory._id;
-            category.lastSyncedAt = Date.now();
+          const id = await generateId();
+          await db.insert(categories).values({
+            id,
+            ...categoryData,
+            createdAt: new Date(),
           });
         }
+      } catch (error) {
+        console.error('Error updating category:', error);
       }
-    });
+    }
   }
 
   /**
@@ -347,16 +315,11 @@ class SyncService {
     documentId: string,
     data: any
   ): Promise<void> {
-    await database.write(async () => {
-      await database.collections.get<SyncQueue>('sync_queue').create((item) => {
-        item.operation = operation;
-        item.collectionName = collection;
-        item.documentId = documentId;
-        item.syncData = data;
-        item.status = 'pending';
-        item.retryCount = 0;
-        item.timestamp = new Date();
-      });
+    await dbHelpers.createSyncQueueItem({
+      operation,
+      collection,
+      documentId,
+      data,
     });
   }
 
@@ -368,23 +331,17 @@ class SyncService {
     failedCount: number;
     lastSyncTime: number | null;
   }> {
-    const pendingItems = await database.collections
-      .get<SyncQueue>('sync_queue')
-      .query(Q.where('status', 'pending'))
-      .fetch();
+    const pendingItems = await dbHelpers.getPendingSyncItems();
+    
+    const db = await getDatabase();
+    const failedItems = await db.select().from(syncQueue)
+      .where(eq(syncQueue.status, 'failed'));
+    
+    const completedItems = await db.select().from(syncQueue)
+      .where(eq(syncQueue.status, 'completed'));
 
-    const failedItems = await database.collections
-      .get<SyncQueue>('sync_queue')
-      .query(Q.where('status', 'failed'))
-      .fetch();
-
-    const lastSyncedItems = await database.collections
-      .get<SyncQueue>('sync_queue')
-      .query(Q.where('status', 'completed'))
-      .fetch();
-
-    const lastSyncTime = lastSyncedItems.length > 0 
-      ? Math.max(...lastSyncedItems.map(item => item.timestamp.getTime()))
+    const lastSyncTime = completedItems.length > 0 
+      ? Math.max(...completedItems.map(item => item.timestamp.getTime()))
       : null;
 
     return {

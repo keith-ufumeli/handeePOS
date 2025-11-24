@@ -18,13 +18,19 @@ import { useProductStore } from '../../src/stores/productStore';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const { dailySummary, fetchDailySummary, loading: reportsLoading } = useReportStore();
   const { orders, loadOrders, isLoading: ordersLoading } = useOrderStore();
   const { products, loadProducts } = useProductStore();
   const [refreshing, setRefreshing] = useState(false);
 
   const loadDashboardData = React.useCallback(async () => {
+    // Only load data if user is authenticated
+    if (!isAuthenticated) {
+      console.log('[HOME_SCREEN] User not authenticated, skipping data load');
+      return;
+    }
+
     try {
       await Promise.all([
         fetchDailySummary(),
@@ -34,11 +40,13 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
-  }, [fetchDailySummary, loadOrders, loadProducts]);
+  }, [isAuthenticated, fetchDailySummary, loadOrders, loadProducts]);
 
   useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
+    if (isAuthenticated) {
+      loadDashboardData();
+    }
+  }, [isAuthenticated, loadDashboardData]);
 
 
   const handleRefresh = async () => {
@@ -65,6 +73,20 @@ export default function HomeScreen() {
   };
 
   const lowStockProducts = products.filter(p => p.isLowStock);
+
+  // Show message if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.centerContainer}>
+          <Ionicons name="lock-closed-outline" size={64} color="#ccc" />
+          <ThemedText type="subtitle" style={styles.errorText}>
+            Please log in to view dashboard
+          </ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -450,6 +472,18 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     opacity: 0.6,
+    textAlign: 'center',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
     textAlign: 'center',
   },
 });

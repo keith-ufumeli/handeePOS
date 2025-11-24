@@ -1,8 +1,6 @@
 import { create } from 'zustand';
-import database from '../database';
-import Product from '../database/models/Product';
-import Category from '../database/models/Category';
-import { Q } from '@nozbe/watermelondb';
+import * as dbHelpers from '../database/db-helpers';
+import { Product, Category } from '../database/types';
 import SyncService from '../services/syncService';
 import { API_CONFIG } from '../config/api';
 
@@ -62,47 +60,9 @@ export const useProductStore = create<ProductState>((set, get) => ({
     set({ isLoading: true, error: null });
     
     try {
-      const { search, category, lowStock, sortBy = 'name', sortOrder = 'asc' } = filters;
-      
-      // Build query
-      let query = database.collections.get<Product>('products').query(
-        Q.where('is_active', true)
-      );
-
-      // Apply filters
-      if (search) {
-        query = query.extend(
-          Q.or(
-            Q.where('name', Q.like(`%${search}%`)),
-            Q.where('sku', Q.like(`%${search}%`)),
-            Q.where('barcode', search)
-          )
-        );
-      }
-
-      if (category) {
-        query = query.extend(Q.where('category_id', category));
-      }
-
-      if (lowStock) {
-        // This would need a custom query for low stock
-        // For now, we'll filter in memory
-      }
-
-      // Apply sorting
-      const sortField = sortBy === 'name' ? 'name' : 'created_at';
-      const sortDirection = sortOrder === 'desc' ? 'desc' : 'asc';
-      query = query.extend(Q.sortBy(sortField, sortDirection));
-
-      const products = await query.fetch();
-      
-      // Filter low stock in memory if needed
-      const filteredProducts = lowStock 
-        ? products.filter(product => product.isLowStock)
-        : products;
-
+      const products = await dbHelpers.getAllProducts(filters);
       set({
-        products: filteredProducts,
+        products,
         isLoading: false,
         filters,
       });
@@ -116,14 +76,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
   loadCategories: async () => {
     try {
-      const categories = await database.collections
-        .get<Category>('categories')
-        .query(
-          Q.where('is_active', true),
-          Q.sortBy('name', 'asc')
-        )
-        .fetch();
-
+      const categories = await dbHelpers.getAllCategories();
       set({ categories });
     } catch (error) {
       set({
@@ -136,19 +89,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
     set({ isLoading: true, error: null });
     
     try {
-      const products = await database.collections
-        .get<Product>('products')
-        .query(
-          Q.where('is_active', true),
-          Q.or(
-            Q.where('name', Q.like(`%${query}%`)),
-            Q.where('sku', Q.like(`%${query}%`)),
-            Q.where('barcode', query)
-          ),
-          Q.sortBy('name', 'asc')
-        )
-        .fetch();
-
+      const products = await dbHelpers.getAllProducts({ search: query });
       set({
         products,
         isLoading: false,
@@ -163,15 +104,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
   searchProductsByBarcode: async (barcode: string) => {
     try {
-      const products = await database.collections
-        .get<Product>('products')
-        .query(
-          Q.where('is_active', true),
-          Q.where('barcode', barcode)
-        )
-        .fetch();
-
-      return products;
+      return await dbHelpers.searchProductsByBarcode(barcode);
     } catch (error) {
       console.error('Error searching products by barcode:', error);
       return [];
@@ -180,12 +113,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
   getProductById: async (id: string) => {
     try {
-      const products = await database.collections
-        .get<Product>('products')
-        .query(Q.where('id', id))
-        .fetch();
-
-      return products.length > 0 ? products[0] : null;
+      return await dbHelpers.getProductById(id);
     } catch (error) {
       console.error('Error getting product:', error);
       return null;
@@ -196,27 +124,22 @@ export const useProductStore = create<ProductState>((set, get) => ({
     set({ isLoading: true, error: null });
     
     try {
-      // Create product locally
-      await database.write(async () => {
-        const product = await database.collections.get<Product>('products').create((record) => {
-          record.name = data.name;
-          record.sku = data.sku;
-          record.barcode = data.barcode;
-          record.categoryId = data.categoryId;
-          record.price = data.price;
-          record.cost = data.cost;
-          record.taxRate = data.taxRate || 0;
-          record.stockQuantity = data.stockQuantity || 0;
-          record.lowStockThreshold = data.lowStockThreshold || 5;
-          record.unit = data.unit || 'pcs';
-          record.images = data.images ? JSON.stringify(data.images) : undefined;
-          record.isActive = true;
-          record.syncStatusValue = 'pending';
-        });
-
-        // Add to sync queue
-        await syncService.addToSyncQueue('create', 'products', product.id, data);
+      const product = await dbHelpers.createProduct({
+        name: data.name,
+        sku: data.sku,
+        barcode: data.barcode,
+        categoryId: data.categoryId,
+        price: data.price,
+        cost: data.cost,
+        taxRate: data.taxRate || 0,
+        stockQuantity: data.stockQuantity || 0,
+        lowStockThreshold: data.lowStockThreshold || 5,
+        unit: data.unit || 'pcs',
+        images: data.images,
       });
+
+      // Add to sync queue
+      await syncService.addToSyncQueue('create', 'products', product.id, data);
 
       // Reload products
       await get().loadProducts(get().filters);
@@ -234,29 +157,22 @@ export const useProductStore = create<ProductState>((set, get) => ({
     set({ isLoading: true, error: null });
     
     try {
-      await database.write(async () => {
-        const product = await database.collections
-          .get<Product>('products')
-          .find(id);
-
-        await product.update((record) => {
-          record.name = data.name;
-          record.sku = data.sku;
-          record.barcode = data.barcode;
-          record.categoryId = data.categoryId;
-          record.price = data.price;
-          record.cost = data.cost;
-          record.taxRate = data.taxRate;
-          record.stockQuantity = data.stockQuantity;
-          record.lowStockThreshold = data.lowStockThreshold;
-          record.unit = data.unit;
-          record.images = data.images ? JSON.stringify(data.images) : undefined;
-          record.syncStatusValue = 'pending';
-        });
-
-        // Add to sync queue
-        await syncService.addToSyncQueue('update', 'products', id, data);
+      await dbHelpers.updateProduct(id, {
+        name: data.name,
+        sku: data.sku,
+        barcode: data.barcode,
+        categoryId: data.categoryId,
+        price: data.price,
+        cost: data.cost,
+        taxRate: data.taxRate,
+        stockQuantity: data.stockQuantity,
+        lowStockThreshold: data.lowStockThreshold,
+        unit: data.unit,
+        images: data.images,
       });
+
+      // Add to sync queue
+      await syncService.addToSyncQueue('update', 'products', id, data);
 
       // Reload products
       await get().loadProducts(get().filters);
@@ -274,19 +190,10 @@ export const useProductStore = create<ProductState>((set, get) => ({
     set({ isLoading: true, error: null });
     
     try {
-      await database.write(async () => {
-        const product = await database.collections
-          .get<Product>('products')
-          .find(id);
+      await dbHelpers.deleteProduct(id);
 
-        await product.update((record) => {
-          record.isActive = false;
-          record.syncStatusValue = 'pending';
-        });
-
-        // Add to sync queue
-        await syncService.addToSyncQueue('delete', 'products', id, {});
-      });
+      // Add to sync queue
+      await syncService.addToSyncQueue('delete', 'products', id, {});
 
       // Reload products
       await get().loadProducts(get().filters);
@@ -304,21 +211,12 @@ export const useProductStore = create<ProductState>((set, get) => ({
     set({ isLoading: true, error: null });
     
     try {
-      await database.write(async () => {
-        const product = await database.collections
-          .get<Product>('products')
-          .find(id);
+      await dbHelpers.updateProduct(id, { stockQuantity });
 
-        await product.update((record) => {
-          record.stockQuantity = stockQuantity;
-          record.syncStatusValue = 'pending';
-        });
-
-        // Add to sync queue
-        await syncService.addToSyncQueue('update', 'products', id, {
-          stockQuantity,
-          reason,
-        });
+      // Add to sync queue
+      await syncService.addToSyncQueue('update', 'products', id, {
+        stockQuantity,
+        reason,
       });
 
       // Reload products

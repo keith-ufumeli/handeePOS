@@ -66,6 +66,11 @@ class ApiService {
 
   async restoreToken() {
     try {
+      console.log('[API_SERVICE] Restoring token from storage', {
+        storageKey: AUTH_TOKEN_KEY,
+        configAuthTokenKey: config.authTokenKey,
+        envValue: process.env.EXPO_PUBLIC_AUTH_TOKEN_KEY
+      });
       const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
       if (token) {
         this.authToken = token;
@@ -75,7 +80,8 @@ class ApiService {
         });
       } else {
         console.log('[API_SERVICE] No token found in storage', {
-          storageKey: AUTH_TOKEN_KEY
+          storageKey: AUTH_TOKEN_KEY,
+          configAuthTokenKey: config.authTokenKey
         });
       }
     } catch (error) {

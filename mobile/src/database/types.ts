@@ -1,0 +1,238 @@
+// Type definitions for database entities
+
+export interface ProductItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  discount: number;
+  tax: number;
+  subtotal: number;
+}
+
+export interface PaymentMethod {
+  method: 'cash' | 'card' | 'mobile_money';
+  amount: number;
+  reference?: string;
+}
+
+export type SyncOperation = 'create' | 'update' | 'delete';
+export type SyncStatus = 'pending' | 'syncing' | 'completed' | 'failed';
+
+// Product type
+export interface Product {
+  id: string;
+  name: string;
+  sku: string;
+  barcode?: string | null;
+  categoryId: string;
+  price: number;
+  cost: number;
+  taxRate: number;
+  stockQuantity: number;
+  lowStockThreshold: number;
+  unit: string;
+  images?: string | null;
+  isActive: boolean;
+  syncStatus: string;
+  lastSyncedAt?: number | null;
+  serverId?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  
+  // Computed properties (not in DB)
+  isLowStock?: boolean;
+  profitMargin?: number;
+  imageUrls?: string[];
+}
+
+// Category type
+export interface Category {
+  id: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  syncStatus: string;
+  lastSyncedAt?: number | null;
+  serverId?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Order type
+export interface Order {
+  id: string;
+  orderNumber: string;
+  cashierId: string;
+  customerId?: string | null;
+  items: string; // JSON string
+  subtotal: number;
+  taxAmount: number;
+  discountAmount: number;
+  total: number;
+  payments: string; // JSON string
+  status: string;
+  customNote?: string | null;
+  syncStatus: string;
+  lastSyncedAt?: number | null;
+  serverId?: string | null;
+  createdAt: Date;
+  completedAt?: Date | null;
+  
+  // Computed properties (not in DB)
+  orderItems?: ProductItem[];
+  paymentMethods?: PaymentMethod[];
+  isCompleted?: boolean;
+  isPending?: boolean;
+  isCancelled?: boolean;
+}
+
+// SyncQueue type
+export interface SyncQueueItem {
+  id: string;
+  operation: SyncOperation;
+  collection: string;
+  documentId: string;
+  data: string; // JSON string
+  status: SyncStatus;
+  retryCount: number;
+  errorMessage?: string | null;
+  timestamp: Date;
+  
+  // Computed properties (not in DB)
+  syncData?: any;
+  isPending?: boolean;
+  isSyncing?: boolean;
+  isCompleted?: boolean;
+  isFailed?: boolean;
+  canRetry?: boolean;
+}
+
+// Helper functions to convert between DB and app types
+export function productFromDb(row: any): Product {
+  const product: Product = {
+    id: row.id,
+    name: row.name,
+    sku: row.sku,
+    barcode: row.barcode,
+    categoryId: row.category_id,
+    price: row.price,
+    cost: row.cost,
+    taxRate: row.tax_rate,
+    stockQuantity: row.stock_quantity,
+    lowStockThreshold: row.low_stock_threshold,
+    unit: row.unit,
+    images: row.images,
+    isActive: Boolean(row.is_active),
+    syncStatus: row.sync_status,
+    lastSyncedAt: row.last_synced_at,
+    serverId: row.server_id,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  };
+  
+  // Add computed properties
+  product.isLowStock = product.stockQuantity <= product.lowStockThreshold;
+  product.profitMargin = product.cost === 0 ? 0 : ((product.price - product.cost) / product.cost) * 100;
+  product.imageUrls = product.images ? (() => {
+    try {
+      return JSON.parse(product.images);
+    } catch {
+      return [];
+    }
+  })() : [];
+  
+  return product;
+}
+
+export function categoryFromDb(row: any): Category {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    isActive: Boolean(row.is_active),
+    syncStatus: row.sync_status,
+    lastSyncedAt: row.last_synced_at,
+    serverId: row.server_id,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
+export function orderFromDb(row: any): Order {
+  const order: Order = {
+    id: row.id,
+    orderNumber: row.order_number,
+    cashierId: row.cashier_id,
+    customerId: row.customer_id,
+    items: row.items,
+    subtotal: row.subtotal,
+    taxAmount: row.tax_amount,
+    discountAmount: row.discount_amount,
+    total: row.total,
+    payments: row.payments,
+    status: row.status,
+    customNote: row.custom_note,
+    syncStatus: row.sync_status,
+    lastSyncedAt: row.last_synced_at,
+    serverId: row.server_id,
+    createdAt: new Date(row.created_at),
+    completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
+  };
+  
+  // Add computed properties
+  order.orderItems = (() => {
+    try {
+      return JSON.parse(order.items);
+    } catch {
+      return [];
+    }
+  })();
+  
+  order.paymentMethods = (() => {
+    try {
+      return JSON.parse(order.payments);
+    } catch {
+      return [];
+    }
+  })();
+  
+  order.isCompleted = order.status === 'completed';
+  order.isPending = order.status === 'pending';
+  order.isCancelled = order.status === 'cancelled';
+  
+  return order;
+}
+
+export function syncQueueFromDb(row: any): SyncQueueItem {
+  const item: SyncQueueItem = {
+    id: row.id,
+    operation: row.operation,
+    collection: row.collection,
+    documentId: row.document_id,
+    data: row.data,
+    status: row.status,
+    retryCount: row.retry_count,
+    errorMessage: row.error_message,
+    timestamp: new Date(row.timestamp),
+  };
+  
+  // Add computed properties
+  item.syncData = (() => {
+    try {
+      return JSON.parse(item.data);
+    } catch {
+      return null;
+    }
+  })();
+  
+  item.isPending = item.status === 'pending';
+  item.isSyncing = item.status === 'syncing';
+  item.isCompleted = item.status === 'completed';
+  item.isFailed = item.status === 'failed';
+  item.canRetry = item.isFailed && item.retryCount < 3;
+  
+  return item;
+}
+
