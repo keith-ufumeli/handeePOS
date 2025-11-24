@@ -3,6 +3,8 @@ import { SyncOperation, SyncQueueItem } from '../database/types';
 import { getDatabase, generateId } from '../database';
 import { products, categories, syncQueue } from '../database/schema';
 import { eq } from 'drizzle-orm';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { config } from '../config';
 
 interface ApiResponse<T = any> {
   success: boolean;
@@ -21,16 +23,61 @@ export interface SyncResult {
 class SyncService {
   private baseUrl: string;
   private authToken: string | null = null;
+  private tokenRestorePromise: Promise<void> | null = null;
+  private readonly AUTH_TOKEN_KEY = config.authTokenKey;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
+    // Restore token from storage on initialization
+    this.tokenRestorePromise = this.restoreToken();
+  }
+
+  // Ensure token is restored before making requests
+  private async ensureTokenRestored() {
+    if (this.tokenRestorePromise) {
+      await this.tokenRestorePromise;
+      this.tokenRestorePromise = null;
+    }
+  }
+
+  async restoreToken() {
+    try {
+      const token = await AsyncStorage.getItem(this.AUTH_TOKEN_KEY);
+      if (token) {
+        this.authToken = token;
+        console.log('[SYNC_SERVICE] Token restored from storage');
+      } else {
+        console.log('[SYNC_SERVICE] No token found in storage');
+      }
+    } catch (error) {
+      console.error('[SYNC_SERVICE] Failed to restore token from storage:', error);
+    }
   }
 
   setAuthToken(token: string) {
     this.authToken = token;
+    // Also persist token to storage
+    if (token) {
+      AsyncStorage.setItem(this.AUTH_TOKEN_KEY, token).catch((error) => {
+        console.error('[SYNC_SERVICE] Failed to save token to storage:', error);
+      });
+    } else {
+      AsyncStorage.removeItem(this.AUTH_TOKEN_KEY).catch((error) => {
+        console.error('[SYNC_SERVICE] Failed to remove token from storage:', error);
+      });
+    }
   }
 
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
+    // Ensure token is restored before making the request
+    await this.ensureTokenRestored();
+    
+    // Double-check token is available
+    if (!this.authToken) {
+      // Try restoring one more time
+      await this.restoreToken();
+    }
+    
     const url = `${this.baseUrl}${endpoint}`;
     const headers = {
       'Content-Type': 'application/json',
@@ -38,13 +85,21 @@ class SyncService {
       ...options.headers,
     };
 
+    // Warn if making authenticated request without token
+    const isAuthEndpoint = endpoint.includes('/auth/');
+    if (!isAuthEndpoint && !this.authToken) {
+      console.warn('[SYNC_SERVICE] Making request without auth token:', endpoint);
+    }
+
     const response = await fetch(url, {
       ...options,
       headers,
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const errorData: any = await response.json().catch(() => ({}));
+      const errorMessage = errorData?.message || errorData?.error || `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(errorMessage);
     }
 
     return response.json();

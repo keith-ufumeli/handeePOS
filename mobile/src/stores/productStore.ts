@@ -235,6 +235,8 @@ export const useProductStore = create<ProductState>((set, get) => ({
     set({ isLoading: true, error: null });
     
     try {
+      // Ensure token is restored before syncing
+      await syncService.restoreToken();
       const result = await syncService.syncAll();
       
       if (result.success) {

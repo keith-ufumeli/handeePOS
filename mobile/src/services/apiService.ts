@@ -102,6 +102,14 @@ class ApiService {
       await this.restoreToken();
     }
     
+    // For authenticated endpoints (not auth endpoints), ensure we have a token
+    const isAuthEndpoint = endpoint.includes('/auth/');
+    if (!isAuthEndpoint && !this.authToken) {
+      const errorMessage = `Cannot make authenticated request to ${endpoint} without auth token. Please log in again.`;
+      console.error('[API_SERVICE]', errorMessage);
+      throw new Error(errorMessage);
+    }
+    
     const url = `${this.baseUrl}${endpoint}`;
     const headers = {
       'Content-Type': 'application/json',
@@ -110,7 +118,7 @@ class ApiService {
     };
 
     // Warn if making authenticated request without token
-    if (!this.authToken && !endpoint.includes('/auth/')) {
+    if (!this.authToken && !isAuthEndpoint) {
       console.warn('[API_SERVICE] Making request without auth token:', endpoint);
     }
 
