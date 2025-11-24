@@ -77,14 +77,43 @@ class AuthService {
     logger.info('[AUTH_SERVICE] Generating tokens', {
       userId: user._id.toString(),
       email: user.email,
-      rememberMe
+      rememberMe,
+      storeIdType: typeof user.storeId,
+      storeIdValue: user.storeId
     });
+
+    // Extract storeId properly - handle both ObjectId and populated Store document
+    let storeIdString: string;
+    if (!user.storeId) {
+      throw new Error('Store ID is required');
+    } else if (typeof user.storeId === 'object' && '_id' in user.storeId) {
+      // Handle populated Store document
+      storeIdString = (user.storeId as any)._id.toString();
+    } else if (typeof user.storeId === 'object' && 'toString' in user.storeId) {
+      // Handle ObjectId instance
+      storeIdString = (user.storeId as any).toString();
+    } else if (typeof user.storeId === 'string') {
+      // Handle string (shouldn't happen but be safe)
+      storeIdString = user.storeId;
+    } else {
+      throw new Error('Invalid storeId format');
+    }
+
+    // Validate storeId is a valid MongoDB ObjectId format
+    if (!/^[0-9a-fA-F]{24}$/.test(storeIdString)) {
+      logger.error('[AUTH_SERVICE] Invalid storeId format in token generation', {
+        storeIdString,
+        storeIdType: typeof user.storeId,
+        storeIdValue: user.storeId
+      });
+      throw new Error('Invalid storeId format');
+    }
 
     const payload: TokenPayload = {
       userId: user._id.toString(),
       email: user.email,
       role: user.role,
-      storeId: user.storeId.toString(),
+      storeId: storeIdString,
       permissions: user.permissions
     };
 

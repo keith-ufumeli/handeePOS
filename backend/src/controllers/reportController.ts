@@ -25,6 +25,32 @@ export class ReportController {
         return;
       }
 
+      // Validate and normalize storeId format
+      let storeIdObjectId: mongoose.Types.ObjectId;
+      try {
+        // Check if storeId is already a valid ObjectId string
+        if (typeof storeId === 'string' && /^[0-9a-fA-F]{24}$/.test(storeId)) {
+          storeIdObjectId = new mongoose.Types.ObjectId(storeId);
+        } else {
+          logger.error('[REPORT_CONTROLLER] Invalid storeId format', {
+            storeId,
+            storeIdType: typeof storeId,
+            userId: req.user?.userId
+          });
+          sendError(res, 'Invalid store ID format', 400);
+          return;
+        }
+      } catch (error) {
+        logger.error('[REPORT_CONTROLLER] Error converting storeId to ObjectId', {
+          error: error instanceof Error ? error.message : String(error),
+          storeId,
+          storeIdType: typeof storeId,
+          userId: req.user?.userId
+        });
+        sendError(res, 'Invalid store ID format', 400);
+        return;
+      }
+
       const targetDate = date ? new Date(date as string) : new Date();
       const startOfDay = new Date(targetDate);
       startOfDay.setHours(0, 0, 0, 0);
@@ -36,7 +62,7 @@ export class ReportController {
       const salesSummary = await Order.aggregate([
         {
           $match: {
-            storeId: new mongoose.Types.ObjectId(storeId),
+            storeId: storeIdObjectId,
             status: 'completed',
             completedAt: {
               $gte: startOfDay,
@@ -114,7 +140,7 @@ export class ReportController {
       const hourlyBreakdown = await Order.aggregate([
         {
           $match: {
-            storeId: new mongoose.Types.ObjectId(storeId),
+            storeId: storeIdObjectId,
             status: 'completed',
             completedAt: {
               $gte: startOfDay,
@@ -138,7 +164,7 @@ export class ReportController {
       const topProducts = await Order.aggregate([
         {
           $match: {
-            storeId: new mongoose.Types.ObjectId(storeId),
+            storeId: storeIdObjectId,
             status: 'completed',
             completedAt: {
               $gte: startOfDay,

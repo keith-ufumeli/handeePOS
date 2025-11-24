@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiService from '../services/apiService';
 import SyncService from '../services/syncService';
 import { config } from '../config';
+import { decodeJWT, extractStoreIdFromToken } from '../utils/jwtDecoder';
 
 // Create sync service instance with error handling
 let syncService: SyncService | null = null;
@@ -85,13 +86,96 @@ export const useAuthStore = create<AuthState>()(
               console.warn('[AUTH_STORE] No access token found in tokens object');
             }
             
-            // Map user object to match our User interface
+            // Extract storeId from JWT token (source of truth from backend)
+            // This ensures we use the exact storeId that the backend will use
+            let storeId = '';
+            if (accessToken) {
+              const tokenStoreId = extractStoreIdFromToken(accessToken);
+              if (tokenStoreId) {
+                storeId = tokenStoreId;
+                console.log('[AUTH_STORE] StoreId extracted from JWT token:', storeId);
+              } else {
+                console.warn('[AUTH_STORE] Failed to extract storeId from JWT token, falling back to API response');
+                // Fallback to API response storeId
+                if (user.storeId) {
+                  if (typeof user.storeId === 'object') {
+                    // Handle MongoDB ObjectId formats: { $oid: "..." } or { _id: "..." }
+                    if ('$oid' in user.storeId) {
+                      storeId = String((user.storeId as any).$oid);
+                    } else if ('_id' in user.storeId) {
+                      storeId = String((user.storeId as any)._id);
+                    } else if ('toString' in user.storeId && typeof (user.storeId as any).toString === 'function') {
+                      storeId = (user.storeId as any).toString();
+                    } else {
+                      const objStr = JSON.stringify(user.storeId);
+                      const match = objStr.match(/"([0-9a-fA-F]{24})"/);
+                      if (match) {
+                        storeId = match[1];
+                      } else {
+                        storeId = String(user.storeId);
+                      }
+                    }
+                  } else if (typeof user.storeId === 'string') {
+                    storeId = user.storeId;
+                  } else {
+                    storeId = String(user.storeId);
+                  }
+                }
+              }
+            } else {
+              // No token, use API response storeId
+              if (user.storeId) {
+                if (typeof user.storeId === 'object') {
+                  if ('$oid' in user.storeId) {
+                    storeId = String((user.storeId as any).$oid);
+                  } else if ('_id' in user.storeId) {
+                    storeId = String((user.storeId as any)._id);
+                  } else {
+                    storeId = String(user.storeId);
+                  }
+                } else if (typeof user.storeId === 'string') {
+                  storeId = user.storeId;
+                } else {
+                  storeId = String(user.storeId);
+                }
+              }
+            }
+            
+            // Validate storeId is a valid MongoDB ObjectId format (24 hex characters)
+            if (storeId && !/^[0-9a-fA-F]{24}$/.test(storeId)) {
+              console.warn('[AUTH_STORE] Invalid storeId format:', storeId, 'Original:', user.storeId);
+              storeId = '';
+            }
+            
+            // If storeId is still empty, decode full token for debugging
+            if (!storeId && accessToken) {
+              const decoded = decodeJWT(accessToken);
+              console.warn('[AUTH_STORE] Token decoded for debugging:', {
+                hasStoreId: !!decoded?.storeId,
+                storeId: decoded?.storeId,
+                storeIdType: typeof decoded?.storeId,
+                userId: decoded?.userId,
+                email: decoded?.email
+              });
+              
+              // If token has invalid storeId, warn user they need to re-login
+              if (decoded?.storeId && !/^[0-9a-fA-F]{24}$/.test(decoded.storeId)) {
+                console.error('[AUTH_STORE] Token contains invalid storeId format. User should log out and log back in to get a new token.');
+              }
+            }
+            
+            // Validate we have a valid storeId before proceeding
+            if (!storeId || !/^[0-9a-fA-F]{24}$/.test(storeId)) {
+              console.error('[AUTH_STORE] Cannot proceed without valid storeId. Token may be outdated. User should log out and log back in.');
+              // Still create user object but with empty storeId - backend will handle validation
+            }
+            
             const mappedUser: User = {
               userId: user.id,
               email: user.email,
               fullName: user.fullName,
               role: user.role,
-              storeId: user.storeId?._id || user.storeId?.toString() || user.storeId || '',
+              storeId: storeId || '', // Use empty string if invalid
               permissions: user.permissions || []
             };
             
@@ -99,7 +183,10 @@ export const useAuthStore = create<AuthState>()(
               userId: mappedUser.userId,
               email: mappedUser.email,
               role: mappedUser.role,
-              storeId: mappedUser.storeId
+              storeId: mappedUser.storeId,
+              storeIdLength: mappedUser.storeId?.length,
+              isValidStoreId: mappedUser.storeId ? /^[0-9a-fA-F]{24}$/.test(mappedUser.storeId) : false,
+              storeIdSource: accessToken && extractStoreIdFromToken(accessToken) ? 'JWT_TOKEN' : 'API_RESPONSE'
             });
             
             set({

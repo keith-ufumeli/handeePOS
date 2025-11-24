@@ -19,40 +19,84 @@ import { useProductStore } from '../../src/stores/productStore';
 export default function HomeScreen() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();
-  const { dailySummary, fetchDailySummary, loading: reportsLoading } = useReportStore();
+  const { dailySummary, fetchDailySummary, loading: reportsLoading, error: reportsError } = useReportStore();
   const { orders, loadOrders, isLoading: ordersLoading } = useOrderStore();
   const { products, loadProducts } = useProductStore();
   const [refreshing, setRefreshing] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
-  const loadDashboardData = React.useCallback(async () => {
+  const loadDashboardData = React.useCallback(async (isInitialLoad = false) => {
     // Only load data if user is authenticated
     if (!isAuthenticated) {
       console.log('[HOME_SCREEN] User not authenticated, skipping data load');
+      setInitialLoading(false);
       return;
     }
 
-    try {
-      await Promise.all([
-        fetchDailySummary(),
-        loadOrders({ dateFrom: new Date(new Date().setHours(0, 0, 0, 0)) }),
-        loadProducts({ lowStock: true }),
-      ]);
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
+    // Validate storeId format before making requests
+    if (user?.storeId && !/^[0-9a-fA-F]{24}$/.test(user.storeId)) {
+      console.warn('[HOME_SCREEN] Invalid storeId format, some requests may fail:', user.storeId);
     }
-  }, [isAuthenticated, fetchDailySummary, loadOrders, loadProducts]);
+
+    if (isInitialLoad) {
+      setInitialLoading(true);
+    }
+
+    try {
+      // Add a small delay after login to ensure token is fully set
+      if (isInitialLoad) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      // Use Promise.allSettled so one failure doesn't block others
+      const results = await Promise.allSettled([
+        fetchDailySummary().catch((error) => {
+          console.warn('[HOME_SCREEN] Failed to load daily summary:', error);
+          return null;
+        }),
+        loadOrders({ dateFrom: new Date(new Date().setHours(0, 0, 0, 0)) }).catch((error) => {
+          console.warn('[HOME_SCREEN] Failed to load orders:', error);
+          return null;
+        }),
+        loadProducts({ lowStock: true }).catch((error) => {
+          console.warn('[HOME_SCREEN] Failed to load products:', error);
+          return null;
+        }),
+      ]);
+
+      // Log any failures for debugging
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const names = ['daily summary', 'orders', 'products'];
+          console.warn(`[HOME_SCREEN] Failed to load ${names[index]}:`, result.reason);
+        }
+      });
+    } catch (error) {
+      console.error('[HOME_SCREEN] Unexpected error loading dashboard data:', error);
+    } finally {
+      if (isInitialLoad) {
+        // Add a small delay for better UX
+        setTimeout(() => {
+          setInitialLoading(false);
+        }, 500);
+      }
+    }
+  }, [isAuthenticated, user?.storeId, fetchDailySummary, loadOrders, loadProducts]);
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadDashboardData();
+      loadDashboardData(true);
+    } else {
+      setInitialLoading(false);
     }
-  }, [isAuthenticated, loadDashboardData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await loadDashboardData();
+      await loadDashboardData(false);
     } finally {
       setRefreshing(false);
     }
@@ -88,6 +132,28 @@ export default function HomeScreen() {
     );
   }
 
+  // Show loading screen on initial load after login
+  if (initialLoading) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingScreen}>
+          <View style={styles.loadingContent}>
+            <View style={styles.loadingIconContainer}>
+              <Ionicons name="storefront" size={64} color="#34C759" />
+            </View>
+            <ActivityIndicator size="large" color="#34C759" style={styles.loadingSpinner} />
+            <ThemedText type="title" style={styles.loadingTitle}>
+              Welcome back, {user?.fullName || 'User'}!
+            </ThemedText>
+            <ThemedText style={styles.loadingSubtitle}>
+              Loading your dashboard...
+            </ThemedText>
+          </View>
+        </View>
+      </ThemedView>
+    );
+  }
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView
@@ -109,9 +175,19 @@ export default function HomeScreen() {
           <ThemedText type="subtitle" style={styles.sectionTitle}>
             Today&apos;s Summary
           </ThemedText>
-          {reportsLoading ? (
+          {reportsLoading && !dailySummary ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color="#007AFF" />
+            </View>
+          ) : reportsError && !dailySummary ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="alert-circle-outline" size={32} color="#FF9500" />
+              <ThemedText style={styles.emptyStateText}>
+                Unable to load today&apos;s summary
+              </ThemedText>
+              <ThemedText style={styles.errorSubtext}>
+                Pull down to refresh
+              </ThemedText>
             </View>
           ) : dailySummary ? (
             <View style={styles.statsGrid}>
@@ -511,6 +587,45 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#666',
+    textAlign: 'center',
+  },
+  loadingScreen: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  loadingContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  loadingSpinner: {
+    marginBottom: 24,
+  },
+  loadingTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  loadingSubtitle: {
+    fontSize: 16,
+    opacity: 0.6,
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    marginTop: 8,
+    fontSize: 12,
+    opacity: 0.5,
     textAlign: 'center',
   },
 });

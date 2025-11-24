@@ -96,12 +96,23 @@ class ApiService {
     // Ensure token is restored before making the request
     await this.ensureTokenRestored();
     
+    // Double-check token is available (in case it was set after ensureTokenRestored)
+    if (!this.authToken) {
+      // Try restoring one more time
+      await this.restoreToken();
+    }
+    
     const url = `${this.baseUrl}${endpoint}`;
     const headers = {
       'Content-Type': 'application/json',
       ...(this.authToken && { Authorization: `Bearer ${this.authToken}` }),
       ...options.headers,
     };
+
+    // Warn if making authenticated request without token
+    if (!this.authToken && !endpoint.includes('/auth/')) {
+      console.warn('[API_SERVICE] Making request without auth token:', endpoint);
+    }
 
     console.log('[API_SERVICE] Making HTTP request', {
       url,
@@ -127,16 +138,17 @@ class ApiService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData: any = await response.json().catch(() => ({}));
+        const errorMessage = errorData?.message || errorData?.error || `HTTP ${response.status}: ${response.statusText}`;
         console.error('[API_SERVICE] HTTP error response', {
           status: response.status,
           statusText: response.statusText,
           errorData
         });
-        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(errorMessage);
       }
 
-      const data = await response.json();
+      const data: T = await response.json() as T;
       console.log('[API_SERVICE] Response parsed successfully', {
         url,
         hasData: !!data

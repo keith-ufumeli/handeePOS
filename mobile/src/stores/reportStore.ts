@@ -128,16 +128,29 @@ export const useReportStore = create<ReportStore>((set, get) => ({
   fetchDailySummary: async (date?: string) => {
     set({ loading: true, error: null });
     try {
+      // Add a small delay to ensure token is set after login
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const url = date ? `/api/reports/daily-summary?date=${date}` : '/api/reports/daily-summary';
       const response = await apiService.get(url);
-      set({ 
-        dailySummary: response.data,
-        loading: false 
-      });
+      
+      if (response.success && response.data) {
+        set({ 
+          dailySummary: response.data,
+          loading: false 
+        });
+      } else {
+        throw new Error(response.message || 'Failed to fetch daily summary');
+      }
     } catch (error: any) {
+      console.warn('[REPORT_STORE] Failed to fetch daily summary:', error);
+      // Don't set error state if it's a 500 error (backend issue with storeId)
+      // This allows the rest of the dashboard to load
+      const errorMessage = error.message || 'Failed to fetch daily summary';
       set({ 
-        error: error.message || 'Failed to fetch daily summary',
-        loading: false 
+        error: errorMessage,
+        loading: false,
+        dailySummary: null // Clear previous data on error
       });
     }
   },
