@@ -3,31 +3,68 @@ import { drizzle } from 'drizzle-orm/expo-sqlite';
 import * as schema from './schema';
 
 let db: ReturnType<typeof drizzle> | null = null;
+let initPromise: Promise<ReturnType<typeof drizzle>> | null = null;
 
 export async function getDatabase() {
   if (db) {
     return db;
   }
 
-  try {
-    // Open SQLite database
-    const sqlite = await SQLite.openDatabaseAsync('handeepos.db');
-    
-    // Enable foreign keys
-    await sqlite.execAsync('PRAGMA foreign_keys = ON;');
-    
-    // Create Drizzle instance
-    db = drizzle(sqlite, { schema });
-    
-    // Initialize tables
-    await initializeTables(sqlite);
-    
-    console.log('[DATABASE] Database initialized successfully');
-    return db;
-  } catch (error) {
-    console.error('[DATABASE] Failed to initialize database:', error);
-    throw error;
+  // If initialization is already in progress, wait for it
+  if (initPromise) {
+    return initPromise;
   }
+
+  // Start initialization
+  initPromise = (async () => {
+    try {
+      // Open SQLite database
+      // Use a unique name to avoid conflicts with previous installations
+      const dbName = 'handeepos_v2.db';
+      let sqlite: SQLite.SQLiteDatabase;
+      
+      try {
+        sqlite = await SQLite.openDatabaseAsync(dbName);
+      } catch (openError: any) {
+        // If opening fails due to path issues, try to clean up and retry
+        if (openError?.message?.includes('non-normal file') || 
+            openError?.message?.includes('Could not open database')) {
+          console.warn('[DATABASE] Path conflict detected, attempting cleanup...');
+          try {
+            // Try to delete the problematic database
+            await SQLite.deleteDatabaseAsync('handeepos.db');
+            // Retry with original name after cleanup
+            sqlite = await SQLite.openDatabaseAsync('handeepos.db');
+          } catch {
+            // If cleanup fails, use a new database name
+            console.warn('[DATABASE] Using fallback database name');
+            sqlite = await SQLite.openDatabaseAsync(dbName);
+          }
+        } else {
+          throw openError;
+        }
+      }
+      
+      // Enable foreign keys
+      await sqlite.execAsync('PRAGMA foreign_keys = ON;');
+      
+      // Create Drizzle instance
+      db = drizzle(sqlite, { schema });
+      
+      // Initialize tables
+      await initializeTables(sqlite);
+      
+      console.log('[DATABASE] Database initialized successfully');
+      return db;
+    } catch (error) {
+      console.error('[DATABASE] Failed to initialize database:', error);
+      // Reset promise on error so we can retry
+      initPromise = null;
+      throw error;
+    }
+  })();
+
+  return initPromise;
 }
 
 async function initializeTables(sqlite: SQLite.SQLiteDatabase) {
