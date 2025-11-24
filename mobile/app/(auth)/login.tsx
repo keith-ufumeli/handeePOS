@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '../../components/themed-view';
@@ -10,7 +10,14 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-  const { login, error, isLoading, clearError } = useAuthStore();
+  const { login, error, isLoading, clearError, isAuthenticated } = useAuthStore();
+
+  // Navigate to home screen after successful login
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace('/(tabs)');
+    }
+  }, [isAuthenticated, router]);
 
   const handleLogin = async () => {
     console.log('[LOGIN_SCREEN] Login attempt started', {
@@ -24,7 +31,7 @@ export default function LoginScreen() {
       console.log('[LOGIN_SCREEN] Calling login function from authStore');
       await login(email, password, rememberMe);
       console.log('[LOGIN_SCREEN] Login function completed successfully');
-      // The root index will handle the redirect after successful login
+      // Navigation will be handled by useEffect when isAuthenticated changes
     } catch (err) {
       console.error('[LOGIN_SCREEN] Login error caught:', {
         error: err instanceof Error ? err.message : String(err),
