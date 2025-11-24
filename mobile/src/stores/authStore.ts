@@ -41,6 +41,9 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       error: null,
 
+      // Initialize: restore token when store is rehydrated
+      _hasHydrated: false,
+
       login: async (email: string, password: string, rememberMe = false) => {
         console.log('[AUTH_STORE] Login called', {
           email,
@@ -231,6 +234,18 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        // Restore token when store is rehydrated
+        if (state?.isAuthenticated && state?.user) {
+          console.log('[AUTH_STORE] Store rehydrated, restoring token');
+          // Ensure token is restored when store rehydrates
+          apiService.restoreToken();
+        }
+      },
     }
   )
 );
+
+// Also restore token immediately on module load (before store rehydration)
+// This ensures token is available for early API calls
+apiService.restoreToken();

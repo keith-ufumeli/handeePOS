@@ -1,9 +1,12 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { config } from '../config';
 
 const API_BASE_URL = __DEV__ 
   ? (Platform.OS === 'ios' ? config.apiUrl : 'https://handeepos.onrender.com')
   : 'https://your-production-api.com';
+
+const AUTH_TOKEN_KEY = config.authTokenKey;
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -24,19 +27,69 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
 class ApiService {
   private baseUrl: string;
   private authToken: string | null = null;
+  private tokenRestorePromise: Promise<void> | null = null;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
+    // Restore token from storage on initialization
+    this.tokenRestorePromise = this.restoreToken();
   }
 
-  setAuthToken(token: string) {
+  // Ensure token is restored before making requests
+  private async ensureTokenRestored() {
+    if (this.tokenRestorePromise) {
+      await this.tokenRestorePromise;
+      this.tokenRestorePromise = null;
+    }
+  }
+
+  async setAuthToken(token: string) {
     this.authToken = token;
+    // Persist token to storage
+    if (token) {
+      try {
+        await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+        console.log('[API_SERVICE] Token saved to storage');
+      } catch (error) {
+        console.error('[API_SERVICE] Failed to save token to storage:', error);
+      }
+    } else {
+      // Clear token from storage
+      try {
+        await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+        console.log('[API_SERVICE] Token removed from storage');
+      } catch (error) {
+        console.error('[API_SERVICE] Failed to remove token from storage:', error);
+      }
+    }
+  }
+
+  async restoreToken() {
+    try {
+      const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+      if (token) {
+        this.authToken = token;
+        console.log('[API_SERVICE] Token restored from storage', {
+          tokenLength: token.length,
+          tokenPrefix: token.substring(0, 20) + '...'
+        });
+      } else {
+        console.log('[API_SERVICE] No token found in storage', {
+          storageKey: AUTH_TOKEN_KEY
+        });
+      }
+    } catch (error) {
+      console.error('[API_SERVICE] Failed to restore token from storage:', error);
+    }
   }
 
   private async makeRequest<T = any>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    // Ensure token is restored before making the request
+    await this.ensureTokenRestored();
+    
     const url = `${this.baseUrl}${endpoint}`;
     const headers = {
       'Content-Type': 'application/json',
@@ -48,6 +101,9 @@ class ApiService {
       url,
       method: options.method || 'GET',
       hasAuthToken: !!this.authToken,
+      authTokenLength: this.authToken?.length || 0,
+      authTokenPrefix: this.authToken ? `${this.authToken.substring(0, 20)}...` : 'none',
+      hasAuthorizationHeader: !!headers.Authorization,
       hasBody: !!options.body
     });
 

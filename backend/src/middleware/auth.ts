@@ -14,11 +14,20 @@ export const authenticate = (
     logger.info('[AUTH_MIDDLEWARE] Authenticating request', {
       path: req.path,
       method: req.method,
-      hasAuthHeader: !!req.headers.authorization
+      hasAuthHeader: !!req.headers.authorization,
+      authHeaderValue: req.headers.authorization ? `${req.headers.authorization.substring(0, 20)}...` : 'missing'
     });
 
+    if (!req.headers.authorization) {
+      logger.warn('[AUTH_MIDDLEWARE] Authorization header is missing');
+      throw new Error('Authorization header is missing');
+    }
+
     const token = authService.extractTokenFromHeader(req.headers.authorization);
-    logger.info('[AUTH_MIDDLEWARE] Token extracted', { tokenLength: token.length });
+    logger.info('[AUTH_MIDDLEWARE] Token extracted', { 
+      tokenLength: token.length,
+      tokenPrefix: token.substring(0, 20) + '...'
+    });
 
     const decoded = authService.verifyAccessToken(token);
     logger.info('[AUTH_MIDDLEWARE] Token verified, user authenticated', {

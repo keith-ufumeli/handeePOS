@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Order from '@/models/Order';
 import Product from '@/models/Product';
 import Customer from '@/models/Customer';
@@ -35,7 +36,7 @@ export class ReportController {
       const salesSummary = await Order.aggregate([
         {
           $match: {
-            storeId: storeId,
+            storeId: new mongoose.Types.ObjectId(storeId),
             status: 'completed',
             completedAt: {
               $gte: startOfDay,
@@ -44,39 +45,67 @@ export class ReportController {
           }
         },
         {
+          $addFields: {
+            totalItemsCount: {
+              $sum: '$items.quantity'
+            },
+            cashPayment: {
+              $sum: {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: '$payments',
+                      as: 'payment',
+                      cond: { $eq: ['$$payment.method', 'cash'] }
+                    }
+                  },
+                  as: 'cash',
+                  in: '$$cash.amount'
+                }
+              }
+            },
+            cardPayment: {
+              $sum: {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: '$payments',
+                      as: 'payment',
+                      cond: { $eq: ['$$payment.method', 'card'] }
+                    }
+                  },
+                  as: 'card',
+                  in: '$$card.amount'
+                }
+              }
+            },
+            mobileMoneyPayment: {
+              $sum: {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: '$payments',
+                      as: 'payment',
+                      cond: { $eq: ['$$payment.method', 'mobile_money'] }
+                    }
+                  },
+                  as: 'mobile',
+                  in: '$$mobile.amount'
+                }
+              }
+            }
+          }
+        },
+        {
           $group: {
             _id: null,
             totalSales: { $sum: '$total' },
             totalOrders: { $sum: 1 },
-            totalItems: { $sum: { $sum: '$items.quantity' } },
+            totalItems: { $sum: '$totalItemsCount' },
             averageOrderValue: { $avg: '$total' },
-            cashSales: {
-              $sum: {
-                $cond: [
-                  { $eq: ['$payments.method', 'cash'] },
-                  '$total',
-                  0
-                ]
-              }
-            },
-            cardSales: {
-              $sum: {
-                $cond: [
-                  { $eq: ['$payments.method', 'card'] },
-                  '$total',
-                  0
-                ]
-              }
-            },
-            mobileMoneySales: {
-              $sum: {
-                $cond: [
-                  { $eq: ['$payments.method', 'mobile_money'] },
-                  '$total',
-                  0
-                ]
-              }
-            }
+            cashSales: { $sum: '$cashPayment' },
+            cardSales: { $sum: '$cardPayment' },
+            mobileMoneySales: { $sum: '$mobileMoneyPayment' }
           }
         }
       ]);
@@ -85,7 +114,7 @@ export class ReportController {
       const hourlyBreakdown = await Order.aggregate([
         {
           $match: {
-            storeId: storeId,
+            storeId: new mongoose.Types.ObjectId(storeId),
             status: 'completed',
             completedAt: {
               $gte: startOfDay,
@@ -109,7 +138,7 @@ export class ReportController {
       const topProducts = await Order.aggregate([
         {
           $match: {
-            storeId: storeId,
+            storeId: new mongoose.Types.ObjectId(storeId),
             status: 'completed',
             completedAt: {
               $gte: startOfDay,
@@ -223,7 +252,7 @@ export class ReportController {
       const salesReport = await Order.aggregate([
         {
           $match: {
-            storeId: storeId,
+            storeId: new mongoose.Types.ObjectId(storeId),
             status: 'completed',
             completedAt: {
               $gte: start,
@@ -236,12 +265,20 @@ export class ReportController {
             _id: groupFormat,
             totalSales: { $sum: '$total' },
             totalOrders: { $sum: 1 },
-            totalItems: { $sum: { $sum: '$items.quantity' } },
+            totalItems: { 
+              $sum: {
+                $reduce: {
+                  input: '$items',
+                  initialValue: 0,
+                  in: { $add: ['$$value', '$$this.quantity'] }
+                }
+              }
+            },
             averageOrderValue: { $avg: '$total' },
             cashSales: {
               $sum: {
                 $cond: [
-                  { $eq: ['$payments.method', 'cash'] },
+                  { $eq: [{ $arrayElemAt: ['$payments.method', 0] }, 'cash'] },
                   '$total',
                   0
                 ]
@@ -250,7 +287,7 @@ export class ReportController {
             cardSales: {
               $sum: {
                 $cond: [
-                  { $eq: ['$payments.method', 'card'] },
+                  { $eq: [{ $arrayElemAt: ['$payments.method', 0] }, 'card'] },
                   '$total',
                   0
                 ]
@@ -259,7 +296,7 @@ export class ReportController {
             mobileMoneySales: {
               $sum: {
                 $cond: [
-                  { $eq: ['$payments.method', 'mobile_money'] },
+                  { $eq: [{ $arrayElemAt: ['$payments.method', 0] }, 'mobile_money'] },
                   '$total',
                   0
                 ]
@@ -306,7 +343,7 @@ export class ReportController {
       const productPerformance = await Order.aggregate([
         {
           $match: {
-            storeId: storeId,
+            storeId: new mongoose.Types.ObjectId(storeId),
             status: 'completed',
             completedAt: {
               $gte: start,
@@ -383,7 +420,7 @@ export class ReportController {
       const inventoryValuation = await Product.aggregate([
         {
           $match: {
-            storeId: storeId,
+            storeId: new mongoose.Types.ObjectId(storeId),
             isActive: true
           }
         },
@@ -459,7 +496,7 @@ export class ReportController {
         Customer.aggregate([
           {
             $match: {
-              storeId: storeId,
+              storeId: new mongoose.Types.ObjectId(storeId),
               isActive: true
             }
           },
@@ -477,7 +514,7 @@ export class ReportController {
         Customer.aggregate([
           {
             $match: {
-              storeId: storeId,
+              storeId: new mongoose.Types.ObjectId(storeId),
               isActive: true,
               totalSpent: { $gt: 0 }
             }
@@ -504,7 +541,7 @@ export class ReportController {
         Customer.aggregate([
           {
             $match: {
-              storeId: storeId,
+              storeId: new mongoose.Types.ObjectId(storeId),
               isActive: true,
               createdAt: {
                 $gte: start,

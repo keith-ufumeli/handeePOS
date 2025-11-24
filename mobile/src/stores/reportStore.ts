@@ -128,7 +128,7 @@ export const useReportStore = create<ReportStore>((set, get) => ({
   fetchDailySummary: async (date?: string) => {
     set({ loading: true, error: null });
     try {
-      const url = date ? `/reports/daily-summary?date=${date}` : '/reports/daily-summary';
+      const url = date ? `/api/reports/daily-summary?date=${date}` : '/api/reports/daily-summary';
       const response = await apiService.get(url);
       set({ 
         dailySummary: response.data,
@@ -146,7 +146,7 @@ export const useReportStore = create<ReportStore>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const response = await apiService.get(
-        `/reports/sales?startDate=${startDate}&endDate=${endDate}&groupBy=${groupBy}`
+        `/api/reports/sales?startDate=${startDate}&endDate=${endDate}&groupBy=${groupBy}`
       );
       set({ 
         salesReport: response.data,
@@ -169,7 +169,7 @@ export const useReportStore = create<ReportStore>((set, get) => ({
       params.append('sortBy', sortBy);
       params.append('limit', limit.toString());
       
-      const response = await apiService.get(`/reports/products?${params.toString()}`);
+      const response = await apiService.get(`/api/reports/products?${params.toString()}`);
       set({ 
         productPerformance: response.data,
         loading: false 
@@ -185,7 +185,7 @@ export const useReportStore = create<ReportStore>((set, get) => ({
   fetchInventoryValuation: async () => {
     set({ loading: true, error: null });
     try {
-      const response = await apiService.get('/reports/inventory');
+      const response = await apiService.get('/api/reports/inventory');
       set({ 
         inventoryValuation: response.data,
         loading: false 
@@ -205,7 +205,7 @@ export const useReportStore = create<ReportStore>((set, get) => ({
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
       
-      const response = await apiService.get(`/reports/customers?${params.toString()}`);
+      const response = await apiService.get(`/api/reports/customers?${params.toString()}`);
       set({ 
         customerAnalytics: response.data,
         loading: false 
