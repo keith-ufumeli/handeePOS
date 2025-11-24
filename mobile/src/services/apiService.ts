@@ -140,11 +140,25 @@ class ApiService {
       if (!response.ok) {
         const errorData: any = await response.json().catch(() => ({}));
         const errorMessage = errorData?.message || errorData?.error || `HTTP ${response.status}: ${response.statusText}`;
+        
         console.error('[API_SERVICE] HTTP error response', {
           status: response.status,
           statusText: response.statusText,
-          errorData
+          errorData,
+          endpoint
         });
+        
+        // Check if error is due to invalid storeId format (400 error)
+        // This indicates the JWT token has an invalid storeId and user needs to re-login
+        if (response.status === 400 && (
+          errorMessage.includes('Invalid store ID format') || 
+          errorMessage.includes('Invalid storeId format') ||
+          errorMessage.includes('Store ID not found')
+        )) {
+          console.error('[API_SERVICE] Token contains invalid storeId. User must log out and log back in to get a new token.');
+          console.warn('[API_SERVICE] The current token was issued before the backend fix. Please log out and log back in.');
+        }
+        
         throw new Error(errorMessage);
       }
 

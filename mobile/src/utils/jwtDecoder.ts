@@ -35,8 +35,15 @@ export function decodeJWT(token: string): DecodedToken | null {
     // Add padding if needed
     const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
     
-    // Decode base64
-    const decoded = atob(padded);
+    // Decode base64 - use atob if available (web), otherwise use Buffer (React Native)
+    let decoded: string;
+    if (typeof atob !== 'undefined') {
+      decoded = atob(padded);
+    } else if (typeof Buffer !== 'undefined') {
+      decoded = Buffer.from(padded, 'base64').toString('utf-8');
+    } else {
+      throw new Error('No base64 decoder available');
+    }
     
     // Parse JSON
     const parsed = JSON.parse(decoded) as DecodedToken;

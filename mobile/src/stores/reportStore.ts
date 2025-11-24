@@ -144,14 +144,27 @@ export const useReportStore = create<ReportStore>((set, get) => ({
       }
     } catch (error: any) {
       console.warn('[REPORT_STORE] Failed to fetch daily summary:', error);
-      // Don't set error state if it's a 500 error (backend issue with storeId)
-      // This allows the rest of the dashboard to load
+      
+      // Check if error is due to invalid storeId format
       const errorMessage = error.message || 'Failed to fetch daily summary';
-      set({ 
-        error: errorMessage,
-        loading: false,
-        dailySummary: null // Clear previous data on error
-      });
+      const isInvalidStoreId = errorMessage.includes('Invalid store ID format') || 
+                               errorMessage.includes('Invalid storeId format');
+      
+      if (isInvalidStoreId) {
+        console.error('[REPORT_STORE] Token contains invalid storeId. User needs to log out and log back in.');
+        // Don't show this error to user - it's a token issue that requires re-login
+        set({ 
+          error: null, // Don't show error for invalid token - user needs to re-login
+          loading: false,
+          dailySummary: null
+        });
+      } else {
+        set({ 
+          error: errorMessage,
+          loading: false,
+          dailySummary: null
+        });
+      }
     }
   },
 
