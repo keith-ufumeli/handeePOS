@@ -91,18 +91,58 @@ class SyncService {
       console.warn('[SYNC_SERVICE] Making request without auth token:', endpoint);
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
+    console.log('[SYNC_SERVICE] Making request:', {
+      endpoint,
+      url,
+      hasToken: !!this.authToken,
+      method: options.method || 'GET'
     });
 
-    if (!response.ok) {
-      const errorData: any = await response.json().catch(() => ({}));
-      const errorMessage = errorData?.message || errorData?.error || `HTTP ${response.status}: ${response.statusText}`;
-      throw new Error(errorMessage);
-    }
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
 
-    return response.json();
+      console.log('[SYNC_SERVICE] Response received:', {
+        endpoint,
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
+      if (!response.ok) {
+        const errorData: any = await response.json().catch(() => ({}));
+        const errorMessage = errorData?.message || errorData?.error || `HTTP ${response.status}: ${response.statusText}`;
+        
+        console.error('[SYNC_SERVICE] Request failed:', {
+          endpoint,
+          status: response.status,
+          statusText: response.statusText,
+          errorData,
+          errorMessage
+        });
+        
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      console.log('[SYNC_SERVICE] Request successful:', {
+        endpoint,
+        hasData: !!data,
+        dataType: typeof data,
+        isArray: Array.isArray(data)
+      });
+      
+      return data;
+    } catch (error) {
+      console.error('[SYNC_SERVICE] Request error:', {
+        endpoint,
+        error: error instanceof Error ? error.message : String(error),
+        errorName: error instanceof Error ? error.name : typeof error
+      });
+      throw error;
+    }
   }
 
   /**
@@ -120,13 +160,22 @@ class SyncService {
       // Get all pending sync queue items
       const pendingItems = await dbHelpers.getPendingSyncItems();
 
+      console.log('[SYNC_SERVICE] Processing sync queue items:', pendingItems.length);
       for (const item of pendingItems) {
         try {
+          console.log('[SYNC_SERVICE] Syncing queue item:', {
+            id: item.id,
+            collection: item.collection,
+            operation: item.operation,
+            documentId: item.documentId
+          });
+          
           // Mark as syncing
           await dbHelpers.updateSyncQueueItem(item.id, { status: 'syncing' });
 
           await this.syncQueueItem(item);
           result.syncedCount++;
+          console.log('[SYNC_SERVICE] Successfully synced queue item:', item.id);
 
           // Mark as completed
           await dbHelpers.updateSyncQueueItem(item.id, { status: 'completed' });
@@ -135,15 +184,25 @@ class SyncService {
           const errorMessage = error instanceof Error ? error.message : String(error);
           result.errors.push(`Failed to sync ${item.collection} ${item.documentId}: ${errorMessage}`);
           
+          console.error('[SYNC_SERVICE] Sync queue item failed:', {
+            id: item.id,
+            collection: item.collection,
+            operation: item.operation,
+            documentId: item.documentId,
+            error: errorMessage,
+            errorStack: error instanceof Error ? error.stack?.substring(0, 500) : undefined
+          });
+          
           // Mark as failed and increment retry count
           await dbHelpers.updateSyncQueueItem(item.id, {
             status: 'failed',
             retryCount: item.retryCount + 1,
             errorMessage,
           });
-          console.error('Sync error:', error);
         }
       }
+      
+      console.log('[SYNC_SERVICE] Sync queue processing complete. Starting pullFromServer...');
 
       // Pull latest data from server
       await this.pullFromServer();
@@ -255,7 +314,10 @@ class SyncService {
    * Pull latest data from server
    */
   private async pullFromServer(): Promise<void> {
+    // Pull products (don't let errors stop category sync)
     try {
+      console.log('[SYNC_SERVICE] ===== Starting pullFromServer =====');
+      console.log('[SYNC_SERVICE] Fetching products from server...');
       // Pull products
       // Backend returns: { success: true, data: { products: [...], pagination: {...} } }
       const productsResponse = await this.makeRequest('/api/products') as ApiResponse<any>;
@@ -289,14 +351,37 @@ class SyncService {
               errorStack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
               productsCount: productsArray.length
             });
-            throw error; // Re-throw to be caught by outer catch
+            // Don't throw - allow categories to sync even if products fail
           }
         }
       }
+    } catch (error) {
+      console.error('[SYNC_SERVICE] Error fetching products (continuing with categories):', {
+        error: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
+      });
+      // Continue to categories sync even if products fail
+    }
 
+    // Pull categories (separate try-catch to ensure it always runs)
+    // This MUST run even if products failed
+    console.log('[SYNC_SERVICE] ===== Starting categories fetch (products may have failed) =====');
+    try {
       // Pull categories
       // Backend returns: { success: true, data: [...] } or { success: true, data: { categories: [...] } }
-      const categoriesResponse = await this.makeRequest('/api/products/categories') as ApiResponse<any>;
+      console.log('[SYNC_SERVICE] Fetching categories from server...');
+      console.log('[SYNC_SERVICE] About to call makeRequest for /api/products/categories');
+      let categoriesResponse: ApiResponse<any>;
+      try {
+        categoriesResponse = await this.makeRequest('/api/products/categories') as ApiResponse<any>;
+        console.log('[SYNC_SERVICE] Categories request completed successfully');
+      } catch (requestError) {
+        console.error('[SYNC_SERVICE] Categories request failed in try block:', {
+          error: requestError instanceof Error ? requestError.message : String(requestError),
+          errorName: requestError instanceof Error ? requestError.name : typeof requestError,
+        });
+        throw requestError; // Re-throw to be caught by outer catch
+      }
       console.log('[SYNC_SERVICE] Categories response:', {
         success: categoriesResponse.success,
         hasData: !!categoriesResponse.data,
@@ -304,7 +389,9 @@ class SyncService {
         isArray: Array.isArray(categoriesResponse.data),
         categoriesCount: Array.isArray(categoriesResponse.data)
           ? categoriesResponse.data.length
-          : categoriesResponse.data?.categories?.length || 0
+          : categoriesResponse.data?.categories?.length || 0,
+        responseKeys: categoriesResponse.data ? Object.keys(categoriesResponse.data) : [],
+        fullResponse: JSON.stringify(categoriesResponse).substring(0, 500)
       });
       
       if (categoriesResponse.success && categoriesResponse.data) {
@@ -315,6 +402,7 @@ class SyncService {
         
         console.log('[SYNC_SERVICE] Processing categories:', categoriesArray.length);
         if (categoriesArray.length > 0) {
+          console.log('[SYNC_SERVICE] Sample category:', JSON.stringify(categoriesArray[0]).substring(0, 200));
           try {
             await this.updateLocalCategories(categoriesArray);
             console.log('[SYNC_SERVICE] Categories updated successfully');
@@ -325,9 +413,18 @@ class SyncService {
               errorStack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
               categoriesCount: categoriesArray.length
             });
-            throw error; // Re-throw to be caught by outer catch
+            // Don't throw - allow sync to continue
           }
+        } else {
+          console.warn('[SYNC_SERVICE] No categories to process. Response data:', JSON.stringify(categoriesResponse.data).substring(0, 300));
         }
+      } else {
+        console.warn('[SYNC_SERVICE] Categories response not successful or no data:', {
+          success: categoriesResponse.success,
+          hasData: !!categoriesResponse.data,
+          message: categoriesResponse.message,
+          error: categoriesResponse.error
+        });
       }
     } catch (error) {
       // Enhanced error logging
@@ -513,8 +610,18 @@ class SyncService {
   private async updateLocalCategories(serverCategories: any[]): Promise<void> {
     const db = await getDatabase();
     
+    let successCount = 0;
+    let errorCount = 0;
+    
     for (const serverCategory of serverCategories) {
       try {
+        // Validate required fields
+        if (!serverCategory.name || String(serverCategory.name).trim() === '') {
+          console.warn('[SYNC_SERVICE] Skipping category without name:', serverCategory);
+          errorCount++;
+          continue;
+        }
+
         // Extract serverId (handle ObjectId format)
         let serverId = '';
         if (serverCategory._id) {
@@ -530,6 +637,7 @@ class SyncService {
         // Skip categories without valid serverId
         if (!serverId || serverId.trim() === '') {
           console.warn('[SYNC_SERVICE] Skipping category without serverId:', serverCategory.name);
+          errorCount++;
           continue;
         }
 
@@ -539,9 +647,18 @@ class SyncService {
           .limit(1);
 
         const now = Date.now();
+        const categoryName = String(serverCategory.name || '').trim();
+        
+        // Ensure name is not empty after trimming
+        if (!categoryName) {
+          console.warn('[SYNC_SERVICE] Skipping category with empty name after trim');
+          errorCount++;
+          continue;
+        }
+
         const categoryData = {
-          name: String(serverCategory.name || ''),
-          description: serverCategory.description ? String(serverCategory.description) : null,
+          name: categoryName,
+          description: serverCategory.description ? String(serverCategory.description).trim() : null,
           isActive: serverCategory.isActive !== false,
           syncStatus: 'synced' as const,
           lastSyncedAt: now,
@@ -554,6 +671,8 @@ class SyncService {
           await db.update(categories)
             .set(categoryData)
             .where(eq(categories.id, existingCategories[0].id));
+          successCount++;
+          console.log('[SYNC_SERVICE] Updated category:', categoryName);
         } else {
           // Create new category
           const id = await generateId();
@@ -562,15 +681,29 @@ class SyncService {
             ...categoryData,
             createdAt: new Date(now), // Drizzle timestamp mode expects Date object
           });
+          successCount++;
+          console.log('[SYNC_SERVICE] Created category:', categoryName);
         }
       } catch (error) {
+        errorCount++;
         console.error('[SYNC_SERVICE] Error updating category:', {
           category: serverCategory.name,
           error: error instanceof Error ? error.message : String(error),
-          errorDetails: error
+          errorStack: error instanceof Error ? error.stack?.substring(0, 300) : undefined,
+          categoryData: {
+            name: serverCategory.name,
+            hasId: !!serverCategory._id || !!serverCategory.id,
+          }
         });
+        // Continue processing other categories instead of throwing
       }
     }
+    
+    console.log('[SYNC_SERVICE] Category sync summary:', {
+      total: serverCategories.length,
+      success: successCount,
+      errors: errorCount
+    });
   }
 
   /**

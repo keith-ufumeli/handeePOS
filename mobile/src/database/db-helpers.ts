@@ -161,6 +161,14 @@ export async function getAllCategories(): Promise<Category[]> {
   const results = await db.select().from(categories)
     .where(eq(categories.isActive, true))
     .orderBy(asc(categories.name));
+  
+  console.log('[DB_HELPERS] getAllCategories: Found', results.length, 'active categories');
+  if (results.length === 0) {
+    // Check if there are any categories at all (including inactive)
+    const allCategories = await db.select().from(categories);
+    console.log('[DB_HELPERS] Total categories in database:', allCategories.length);
+  }
+  
   return results.map(categoryFromDb);
 }
 

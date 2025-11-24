@@ -14,6 +14,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../../src/stores/productStore';
 import { Category } from '../../../src/database/types';
 
+// Get store instance for direct access
+const getProductStore = () => useProductStore.getState();
+
 export default function EditProductScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -49,21 +52,19 @@ export default function EditProductScreen() {
     // Load categories first, then product
     const initializeData = async () => {
       try {
-        // Always ensure categories are loaded
-        if (categories.length === 0) {
-          console.log('[EDIT_PRODUCT] Loading categories...');
-          setCategoriesLoading(true);
-          try {
-            await loadCategories();
-            console.log('[EDIT_PRODUCT] Categories loaded successfully');
-          } catch (catError) {
-            console.error('[EDIT_PRODUCT] Error loading categories:', catError);
-            Alert.alert('Warning', 'Failed to load categories. Please sync products first.');
-          } finally {
-            setCategoriesLoading(false);
-          }
-        } else {
-          console.log('[EDIT_PRODUCT] Categories already loaded:', categories.length);
+        // Always load categories to ensure fresh data
+        console.log('[EDIT_PRODUCT] Loading categories... (current count:', categories.length, ')');
+        setCategoriesLoading(true);
+        try {
+          await loadCategories();
+          // Get updated categories count from store after loading
+          const updatedCategories = getProductStore().categories;
+          console.log('[EDIT_PRODUCT] Categories loaded successfully, count:', updatedCategories.length);
+        } catch (catError) {
+          console.error('[EDIT_PRODUCT] Error loading categories:', catError);
+          Alert.alert('Warning', 'Failed to load categories. Please sync products first.');
+        } finally {
+          setCategoriesLoading(false);
         }
         
         if (id) {
@@ -86,6 +87,11 @@ export default function EditProductScreen() {
       clearError();
     }
   }, [error, clearError]);
+
+  // Watch for category updates and log them
+  useEffect(() => {
+    console.log('[EDIT_PRODUCT] Categories updated in store:', categories.length);
+  }, [categories]);
 
   const loadProduct = async () => {
     try {

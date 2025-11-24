@@ -174,6 +174,16 @@ export const validateRequest = (req: Request, res: Response, next: NextFunction)
   if (!errors.isEmpty()) {
     const errorMessages: Record<string, string[]> = {};
     
+    // Log validation errors for debugging
+    console.log('[VALIDATION] Validation errors detected:', {
+      url: req.url,
+      path: req.path,
+      method: req.method,
+      params: req.params,
+      query: req.query,
+      errors: errors.array()
+    });
+    
     errors.array().forEach((error: any) => {
       const field = error.path || error.param;
       if (!errorMessages[field]) {

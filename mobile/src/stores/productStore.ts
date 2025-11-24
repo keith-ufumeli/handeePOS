@@ -77,10 +77,13 @@ export const useProductStore = create<ProductState>((set, get) => ({
   loadCategories: async () => {
     try {
       const categories = await dbHelpers.getAllCategories();
+      console.log('[PRODUCT_STORE] Loaded categories:', categories.length);
       set({ categories });
     } catch (error) {
+      console.error('[PRODUCT_STORE] Error loading categories:', error);
       set({
         error: error instanceof Error ? error.message : 'Failed to load categories',
+        categories: [], // Ensure categories array is set even on error
       });
     }
   },
