@@ -4,6 +4,13 @@ import { getDatabase, generateId } from '../database';
 import { products, categories, syncQueue } from '../database/schema';
 import { eq } from 'drizzle-orm';
 
+interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
+}
+
 export interface SyncResult {
   success: boolean;
   syncedCount: number;
@@ -195,13 +202,13 @@ class SyncService {
   private async pullFromServer(): Promise<void> {
     try {
       // Pull products
-      const productsResponse = await this.makeRequest('/api/products');
+      const productsResponse = await this.makeRequest('/api/products') as ApiResponse<any[]>;
       if (productsResponse.success && productsResponse.data) {
         await this.updateLocalProducts(productsResponse.data);
       }
 
       // Pull categories
-      const categoriesResponse = await this.makeRequest('/api/products/categories');
+      const categoriesResponse = await this.makeRequest('/api/products/categories') as ApiResponse<any[]>;
       if (categoriesResponse.success && categoriesResponse.data) {
         await this.updateLocalCategories(categoriesResponse.data);
       }
