@@ -257,18 +257,36 @@ class SyncService {
   private async pullFromServer(): Promise<void> {
     try {
       // Pull products
-      const productsResponse = await this.makeRequest('/api/products') as ApiResponse<any[]>;
+      // Backend returns: { success: true, data: { products: [...], pagination: {...} } }
+      const productsResponse = await this.makeRequest('/api/products') as ApiResponse<any>;
       if (productsResponse.success && productsResponse.data) {
-        await this.updateLocalProducts(productsResponse.data);
+        // Handle both response formats:
+        // 1. { data: { products: [...], pagination: {...} } } - from GET /api/products
+        // 2. { data: [...] } - direct array (for backward compatibility)
+        const productsArray = Array.isArray(productsResponse.data) 
+          ? productsResponse.data 
+          : productsResponse.data.products || [];
+        
+        if (productsArray.length > 0) {
+          await this.updateLocalProducts(productsArray);
+        }
       }
 
       // Pull categories
-      const categoriesResponse = await this.makeRequest('/api/products/categories') as ApiResponse<any[]>;
+      // Backend returns: { success: true, data: [...] } or { success: true, data: { categories: [...] } }
+      const categoriesResponse = await this.makeRequest('/api/products/categories') as ApiResponse<any>;
       if (categoriesResponse.success && categoriesResponse.data) {
-        await this.updateLocalCategories(categoriesResponse.data);
+        // Handle both response formats
+        const categoriesArray = Array.isArray(categoriesResponse.data)
+          ? categoriesResponse.data
+          : categoriesResponse.data.categories || [];
+        
+        if (categoriesArray.length > 0) {
+          await this.updateLocalCategories(categoriesArray);
+        }
       }
     } catch (error) {
-      console.error('Error pulling from server:', error);
+      console.error('[SYNC_SERVICE] Error pulling from server:', error);
       // Don't throw - allow sync to continue even if pull fails
     }
   }
