@@ -14,7 +14,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../src/stores/productStore';
 import { useAuthStore } from '../../src/stores/authStore';
-import Product from '../../src/database/models/Product';
+import { Product } from '../../src/database/types';
 
 export default function ProductsScreen() {
   const router = useRouter();
@@ -73,7 +73,13 @@ export default function ProductsScreen() {
   const handleFilterChange = (newFilters: any) => {
     const updatedFilters = { ...filters, ...newFilters };
     setFilters(updatedFilters);
+    // Reload products with updated filters
     loadProducts(updatedFilters);
+  };
+
+  const handleLowStockToggle = () => {
+    const newLowStockValue = !filters.lowStock;
+    handleFilterChange({ lowStock: newLowStockValue });
   };
 
   const renderProduct = ({ item }: { item: Product }) => (
@@ -101,9 +107,9 @@ export default function ProductsScreen() {
       
       <View style={styles.productFooter}>
         <View style={styles.syncStatusContainer}>
-          {item.syncStatusValue === 'synced' ? (
+          {item.syncStatus === 'synced' ? (
             <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-          ) : item.syncStatusValue === 'pending' ? (
+          ) : item.syncStatus === 'pending' ? (
             <Ionicons name="time" size={16} color="#f59e0b" />
           ) : (
             <Ionicons name="close-circle" size={16} color="#ef4444" />
@@ -200,8 +206,14 @@ export default function ProductsScreen() {
             styles.filterButton,
             filters.lowStock && styles.filterButtonActive,
           ]}
-          onPress={() => handleFilterChange({ lowStock: !filters.lowStock })}
+          onPress={handleLowStockToggle}
         >
+          <Ionicons 
+            name={filters.lowStock ? "warning" : "warning-outline"} 
+            size={16} 
+            color={filters.lowStock ? "#fff" : "#666"} 
+            style={{ marginRight: 6 }}
+          />
           <Text style={[
             styles.filterButtonText,
             filters.lowStock && styles.filterButtonTextActive,
