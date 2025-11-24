@@ -28,6 +28,7 @@ export default function EditProductScreen() {
   } = useProductStore();
   
   const [loading, setLoading] = useState(true);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
@@ -45,16 +46,39 @@ export default function EditProductScreen() {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (id) {
-      loadProduct();
-    }
+    // Load categories first, then product
+    const initializeData = async () => {
+      try {
+        // Always ensure categories are loaded
+        if (categories.length === 0) {
+          console.log('[EDIT_PRODUCT] Loading categories...');
+          setCategoriesLoading(true);
+          try {
+            await loadCategories();
+            console.log('[EDIT_PRODUCT] Categories loaded successfully');
+          } catch (catError) {
+            console.error('[EDIT_PRODUCT] Error loading categories:', catError);
+            Alert.alert('Warning', 'Failed to load categories. Please sync products first.');
+          } finally {
+            setCategoriesLoading(false);
+          }
+        } else {
+          console.log('[EDIT_PRODUCT] Categories already loaded:', categories.length);
+        }
+        
+        if (id) {
+          await loadProduct();
+        }
+      } catch (error) {
+        console.error('[EDIT_PRODUCT] Error initializing:', error);
+        Alert.alert('Error', 'Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    initializeData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-
-  useEffect(() => {
-    loadCategories();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     if (error) {
@@ -65,6 +89,7 @@ export default function EditProductScreen() {
 
   const loadProduct = async () => {
     try {
+      setLoading(true);
       const productData = await getProductById(id);
       if (productData) {
         setFormData({
@@ -188,31 +213,46 @@ export default function EditProductScreen() {
     onValueChange: (value: string) => void,
     options: { label: string; value: string }[],
     error?: string
-  ) => (
-    <View style={styles.inputGroup}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <View style={[styles.selectContainer, error && styles.inputError]}>
-        {options.map((option) => (
-          <TouchableOpacity
-            key={option.value}
-            style={[
-              styles.selectOption,
-              value === option.value && styles.selectOptionActive,
-            ]}
-            onPress={() => onValueChange(option.value)}
-          >
-            <Text style={[
-              styles.selectOptionText,
-              value === option.value && styles.selectOptionTextActive,
-            ]}>
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+  ) => {
+    // Filter out the "Select Category" placeholder if we have a value
+    const displayOptions = value && options.length > 1 
+      ? options.filter(opt => opt.value !== '' || opt.label !== 'Select Category')
+      : options;
+    
+    return (
+      <View style={styles.inputGroup}>
+        <Text style={styles.inputLabel}>{label}</Text>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.selectScrollView}
+          contentContainerStyle={styles.selectContainer}
+        >
+          {displayOptions.map((option) => (
+            <TouchableOpacity
+              key={option.value || 'empty'}
+              style={[
+                styles.selectOption,
+                value === option.value && styles.selectOptionActive,
+              ]}
+              onPress={() => onValueChange(option.value)}
+            >
+              <Text style={[
+                styles.selectOptionText,
+                value === option.value && styles.selectOptionTextActive,
+              ]}>
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        {error && <Text style={styles.errorText}>{error}</Text>}
+        {options.length === 0 && (
+          <Text style={styles.hintText}>No categories available. Please sync products first.</Text>
+        )}
       </View>
-      {error && <Text style={styles.errorText}>{error}</Text>}
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -280,18 +320,38 @@ export default function EditProductScreen() {
           )}
         </View>
 
-        {renderSelect(
-          'Category *',
-          formData.categoryId,
-          (value) => setFormData({ ...formData, categoryId: value }),
-          [
-            { label: 'Select Category', value: '' },
-            ...categories.map((category: Category) => ({
-              label: category.name,
-              value: category.id,
-            })),
-          ],
-          validationErrors.categoryId
+        {categoriesLoading ? (
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Category *</Text>
+            <View style={styles.loadingCategoriesContainer}>
+              <ActivityIndicator size="small" color="#007AFF" />
+              <Text style={styles.loadingCategoriesText}>Loading categories...</Text>
+            </View>
+          </View>
+        ) : categories.length > 0 ? (
+          renderSelect(
+            'Category *',
+            formData.categoryId,
+            (value) => setFormData({ ...formData, categoryId: value }),
+            [
+              { label: 'Select Category', value: '' },
+              ...categories.map((category: Category) => ({
+                label: category.name,
+                value: category.id,
+              })),
+            ],
+            validationErrors.categoryId
+          )
+        ) : (
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Category *</Text>
+            <View style={styles.emptyCategoriesContainer}>
+              <Ionicons name="alert-circle-outline" size={20} color="#FF9500" />
+              <Text style={styles.emptyCategoriesText}>
+                No categories available. Please sync products first.
+              </Text>
+            </View>
+          </View>
         )}
 
         <View style={styles.row}>
@@ -440,10 +500,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
+  selectScrollView: {
+    maxHeight: 120,
+  },
   selectContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    paddingVertical: 4,
   },
   selectOption: {
     paddingHorizontal: 12,
@@ -509,6 +573,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
+  },
+  loadingCategoriesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  loadingCategoriesText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#666',
+  },
+  emptyCategoriesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#FFF4E6',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+  },
+  emptyCategoriesText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#E65100',
+    flex: 1,
+  },
+  hintText: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
 });
 
