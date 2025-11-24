@@ -38,6 +38,27 @@ router.get('/search',
   ProductController.searchByBarcode as any
 );
 
+// Category routes - MUST come before /:id route to avoid route conflicts
+/**
+ * @route   GET /api/products/categories
+ * @desc    Get all categories
+ * @access  Private
+ */
+router.get('/categories', CategoryController.getCategories as any);
+
+/**
+ * @route   GET /api/products/categories/:id
+ * @desc    Get single category
+ * @access  Private
+ */
+router.get('/categories/:id',
+  [
+    param('id').isMongoId().withMessage('Invalid category ID')
+  ],
+  validateRequest,
+  CategoryController.getCategory as any
+);
+
 /**
  * @route   GET /api/products/:id
  * @desc    Get single product
@@ -115,27 +136,7 @@ router.put('/:id/stock',
   ProductController.updateStock as any
 );
 
-// Category routes
-/**
- * @route   GET /api/products/categories
- * @desc    Get all categories
- * @access  Private
- */
-router.get('/categories', CategoryController.getCategories as any);
-
-/**
- * @route   GET /api/products/categories/:id
- * @desc    Get single category
- * @access  Private
- */
-router.get('/categories/:id',
-  [
-    param('id').isMongoId().withMessage('Invalid category ID')
-  ],
-  validateRequest,
-  CategoryController.getCategory as any
-);
-
+// Category routes (POST, PUT, DELETE) - GET routes moved above
 /**
  * @route   POST /api/products/categories
  * @desc    Create category
