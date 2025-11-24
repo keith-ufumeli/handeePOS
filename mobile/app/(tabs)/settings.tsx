@@ -11,8 +11,10 @@ import {
   RefreshControl,
   ActivityIndicator
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../../src/stores/settingsStore';
+import { useAuthStore } from '../../src/stores/authStore';
 
 interface StoreSettings {
   _id: string;
@@ -64,6 +66,8 @@ interface StoreSettings {
 }
 
 export default function SettingsScreen() {
+  const router = useRouter();
+  const { user, logout } = useAuthStore();
   const {
     storeSettings,
     loading,
@@ -95,6 +99,28 @@ export default function SettingsScreen() {
   const handleCancel = () => {
     setIsEditing(false);
     setEditedSettings({});
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            router.replace('/(auth)/login');
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const handleFieldChange = (field: string, value: any) => {
@@ -625,6 +651,27 @@ export default function SettingsScreen() {
           />
         }
       >
+        {/* User Profile Section */}
+        <View style={styles.profileSection}>
+          <View style={styles.profileCard}>
+            <View style={styles.profileHeader}>
+              <View style={styles.profileAvatar}>
+                <Ionicons name="person" size={32} color="#fff" />
+              </View>
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{user?.fullName || 'User'}</Text>
+                <Text style={styles.profileEmail}>{user?.email || ''}</Text>
+                <Text style={styles.profileRole}>{user?.role || 'Staff'}</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={20} color="#fff" />
+              <Text style={styles.logoutButtonText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Settings Content */}
         {activeSection === 'general' && renderGeneralSettings()}
         {activeSection === 'receipt' && renderReceiptSettings()}
         {activeSection === 'tax' && renderTaxSettings()}
@@ -839,5 +886,71 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#111827',
     backgroundColor: '#FFFFFF',
+  },
+  profileSection: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  profileCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  profileAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#3B82F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  profileEmail: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  profileRole: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    textTransform: 'capitalize',
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF3B30',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    gap: 8,
+  },
+  logoutButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

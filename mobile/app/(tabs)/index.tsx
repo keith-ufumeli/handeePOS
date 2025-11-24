@@ -92,20 +92,16 @@ export default function HomeScreen() {
     <ThemedView style={styles.container}>
       <ScrollView
         style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <ThemedText type="title" style={styles.greeting}>
-              {getGreeting()},
-            </ThemedText>
-            <ThemedText type="subtitle" style={styles.userName}>
-              {user?.fullName || 'User'}
-            </ThemedText>
-          </View>
+          <ThemedText type="title" style={styles.greeting}>
+            {getGreeting()}, {user?.fullName || 'User'}
+          </ThemedText>
         </View>
 
         {/* Today's Stats */}
@@ -274,6 +270,15 @@ export default function HomeScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Floating Action Button for New Sale */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push('/(tabs)/sales')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="cart" size={28} color="#fff" />
+      </TouchableOpacity>
     </ThemedView>
   );
 }
@@ -285,19 +290,40 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  scrollContent: {
+    paddingBottom: 80, // Extra padding for FAB
+  },
   header: {
     padding: 20,
-    paddingTop: 10,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   greeting: {
-    marginBottom: 4,
+    fontSize: 24,
   },
   userName: {
     opacity: 0.8,
   },
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#34C759',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 999,
+  },
   section: {
     paddingHorizontal: 20,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -321,7 +347,7 @@ const styles = StyleSheet.create({
   statCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
     width: '47%',
     alignItems: 'center',
     shadowColor: '#000',
@@ -329,6 +355,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    minHeight: 90,
   },
   statValue: {
     fontSize: 20,
