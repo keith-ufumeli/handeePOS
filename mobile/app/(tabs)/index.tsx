@@ -6,18 +6,26 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  StatusBar,
+  Text,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { ThemedText } from '../../components/themed-text';
-import { ThemedView } from '../../components/themed-view';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useReportStore } from '../../src/stores/reportStore';
 import { useOrderStore } from '../../src/stores/orderStore';
 import { useProductStore } from '../../src/stores/productStore';
+import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
+import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const { user, isAuthenticated } = useAuthStore();
   const { dailySummary, fetchDailySummary, loading: reportsLoading, error: reportsError } = useReportStore();
   const { orders, loadOrders, isLoading: ordersLoading } = useOrderStore();
@@ -26,16 +34,9 @@ export default function HomeScreen() {
   const [initialLoading, setInitialLoading] = useState(true);
 
   const loadDashboardData = React.useCallback(async (isInitialLoad = false) => {
-    // Only load data if user is authenticated
     if (!isAuthenticated) {
-      console.log('[HOME_SCREEN] User not authenticated, skipping data load');
       setInitialLoading(false);
       return;
-    }
-
-    // Validate storeId format before making requests
-    if (user?.storeId && !/^[0-9a-fA-F]{24}$/.test(user.storeId)) {
-      console.warn('[HOME_SCREEN] Invalid storeId format, some requests may fail:', user.storeId);
     }
 
     if (isInitialLoad) {
@@ -43,45 +44,25 @@ export default function HomeScreen() {
     }
 
     try {
-      // Add a small delay after login to ensure token is fully set
       if (isInitialLoad) {
         await new Promise(resolve => setTimeout(resolve, 200));
       }
 
-      // Use Promise.allSettled so one failure doesn't block others
-      const results = await Promise.allSettled([
-        fetchDailySummary().catch((error) => {
-          console.warn('[HOME_SCREEN] Failed to load daily summary:', error);
-          return null;
-        }),
-        loadOrders({ dateFrom: new Date(new Date().setHours(0, 0, 0, 0)) }).catch((error) => {
-          console.warn('[HOME_SCREEN] Failed to load orders:', error);
-          return null;
-        }),
-        loadProducts({ lowStock: true }).catch((error) => {
-          console.warn('[HOME_SCREEN] Failed to load products:', error);
-          return null;
-        }),
+      await Promise.allSettled([
+        fetchDailySummary().catch(() => null),
+        loadOrders({ dateFrom: new Date(new Date().setHours(0, 0, 0, 0)) }).catch(() => null),
+        loadProducts({ lowStock: true }).catch(() => null),
       ]);
-
-      // Log any failures for debugging
-      results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          const names = ['daily summary', 'orders', 'products'];
-          console.warn(`[HOME_SCREEN] Failed to load ${names[index]}:`, result.reason);
-        }
-      });
     } catch (error) {
       console.error('[HOME_SCREEN] Unexpected error loading dashboard data:', error);
     } finally {
       if (isInitialLoad) {
-        // Add a small delay for better UX
         setTimeout(() => {
           setInitialLoading(false);
         }, 500);
       }
     }
-  }, [isAuthenticated, user?.storeId, fetchDailySummary, loadOrders, loadProducts]);
+  }, [isAuthenticated, fetchDailySummary, loadOrders, loadProducts]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -89,9 +70,7 @@ export default function HomeScreen() {
     } else {
       setInitialLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
-
+  }, [isAuthenticated, loadDashboardData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -118,244 +97,196 @@ export default function HomeScreen() {
 
   const lowStockProducts = products.filter(p => p.isLowStock);
 
-  // Show message if not authenticated
   if (!isAuthenticated) {
     return (
-      <ThemedView style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.centerContainer}>
-          <Ionicons name="lock-closed-outline" size={64} color="#ccc" />
-          <ThemedText type="subtitle" style={styles.errorText}>
+          <Ionicons name="lock-closed-outline" size={64} color={theme.gray400} />
+          <Text style={[styles.errorText, { color: theme.gray600 }]}>
             Please log in to view dashboard
-          </ThemedText>
+          </Text>
         </View>
-      </ThemedView>
+      </View>
     );
   }
 
-  // Show loading screen on initial load after login
   if (initialLoading) {
     return (
-      <ThemedView style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingScreen}>
-          <View style={styles.loadingContent}>
-            <View style={styles.loadingIconContainer}>
-              <Ionicons name="storefront" size={64} color="#34C759" />
-            </View>
-            <ActivityIndicator size="large" color="#34C759" style={styles.loadingSpinner} />
-            <ThemedText type="title" style={styles.loadingTitle}>
-              Welcome back, {user?.fullName || 'User'}!
-            </ThemedText>
-            <ThemedText style={styles.loadingSubtitle}>
-              Loading your dashboard...
-            </ThemedText>
+          <View style={styles.loadingIconContainer}>
+            <Ionicons name="storefront" size={64} color={theme.primary} />
           </View>
+          <ActivityIndicator size="large" color={theme.primary} style={styles.loadingSpinner} />
+          <Text style={[styles.loadingTitle, { color: theme.text }]}>
+            Welcome back!
+          </Text>
+          <Text style={[styles.loadingSubtitle, { color: theme.gray500 }]}>
+            Loading your dashboard...
+          </Text>
         </View>
-      </ThemedView>
+      </View>
     );
   }
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} />
         }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <ThemedText type="title" style={styles.greeting}>
-            {getGreeting()}, {user?.fullName || 'User'}
-          </ThemedText>
-        </View>
+        {/* Header Banner */}
+        <LinearGradient
+          colors={[theme.primary, theme.primaryDark]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerBanner}
+        >
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.greetingText}>{getGreeting()},</Text>
+              <Text style={styles.userNameText}>{user?.fullName || 'User'}</Text>
+            </View>
+            <View style={styles.headerIcon}>
+              <Ionicons name="notifications-outline" size={24} color="#FFF" />
+            </View>
+          </View>
+          
+          {/* Today's Summary Cards */}
+          <View style={styles.summaryContainer}>
+            <View style={styles.summaryRow}>
+              <Card style={styles.summaryCard} padding="md">
+                <View style={styles.summaryIconBg}>
+                  <Ionicons name="cash-outline" size={20} color={theme.success} />
+                </View>
+                <Text style={[styles.summaryLabel, { color: theme.gray500 }]}>Total Sales</Text>
+                <Text style={[styles.summaryValue, { color: theme.text }]}>
+                  {dailySummary ? formatCurrency(dailySummary.summary.totalSales) : '$0.00'}
+                </Text>
+              </Card>
+              <Card style={styles.summaryCard} padding="md">
+                <View style={[styles.summaryIconBg, { backgroundColor: theme.infoBg }]}>
+                  <Ionicons name="receipt-outline" size={20} color={theme.info} />
+                </View>
+                <Text style={[styles.summaryLabel, { color: theme.gray500 }]}>Orders</Text>
+                <Text style={[styles.summaryValue, { color: theme.text }]}>
+                  {dailySummary ? dailySummary.summary.totalOrders : '0'}
+                </Text>
+              </Card>
+            </View>
+          </View>
+        </LinearGradient>
 
-        {/* Today's Stats */}
-        <View style={styles.section}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Today&apos;s Summary
-          </ThemedText>
-          {reportsLoading && !dailySummary ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#007AFF" />
-            </View>
-          ) : reportsError && !dailySummary ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="alert-circle-outline" size={32} color="#FF9500" />
-              <ThemedText style={styles.emptyStateText}>
-                Unable to load today&apos;s summary
-              </ThemedText>
-              <ThemedText style={styles.errorSubtext}>
-                Pull down to refresh
-              </ThemedText>
-            </View>
-          ) : dailySummary ? (
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <Ionicons name="cash-outline" size={24} color="#34C759" />
-                <ThemedText style={styles.statValue}>
-                  {formatCurrency(dailySummary.summary.totalSales)}
-                </ThemedText>
-                <ThemedText style={styles.statLabel}>Total Sales</ThemedText>
-              </View>
-              <View style={styles.statCard}>
-                <Ionicons name="receipt-outline" size={24} color="#007AFF" />
-                <ThemedText style={styles.statValue}>
-                  {dailySummary.summary.totalOrders}
-                </ThemedText>
-                <ThemedText style={styles.statLabel}>Orders</ThemedText>
-              </View>
-              <View style={styles.statCard}>
-                <Ionicons name="cube-outline" size={24} color="#FF9500" />
-                <ThemedText style={styles.statValue}>
-                  {dailySummary.summary.totalItems}
-                </ThemedText>
-                <ThemedText style={styles.statLabel}>Items Sold</ThemedText>
-              </View>
-              <View style={styles.statCard}>
-                <Ionicons name="trending-up-outline" size={24} color="#AF52DE" />
-                <ThemedText style={styles.statValue}>
-                  {formatCurrency(dailySummary.summary.averageOrderValue)}
-                </ThemedText>
-                <ThemedText style={styles.statLabel}>Avg Order</ThemedText>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <ThemedText style={styles.emptyStateText}>
-                No data available for today
-              </ThemedText>
-            </View>
-          )}
-        </View>
-
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Quick Actions
-          </ThemedText>
+        <View style={styles.mainContent}>
+          {/* Quick Actions */}
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Quick Actions</Text>
           <View style={styles.actionsGrid}>
             <TouchableOpacity
-              style={[styles.actionCard, styles.primaryAction]}
+              style={[styles.actionButton, { backgroundColor: theme.primary }]}
               onPress={() => router.push('/(tabs)/sales')}
+              activeOpacity={0.8}
             >
-              <Ionicons name="cart" size={32} color="#fff" />
-              <ThemedText style={styles.actionText}>New Sale</ThemedText>
+              <Ionicons name="cart" size={24} color="#FFF" />
+              <Text style={styles.actionButtonText}>New Sale</Text>
             </TouchableOpacity>
+            
             <TouchableOpacity
-              style={styles.actionCard}
+              style={[styles.actionButton, { backgroundColor: theme.cardBg, borderWidth: 1, borderColor: theme.border }]}
               onPress={() => router.push('/(tabs)/products')}
+              activeOpacity={0.8}
             >
-              <Ionicons name="bag" size={28} color="#007AFF" />
-              <ThemedText style={styles.actionText}>Products</ThemedText>
+              <Ionicons name="cube-outline" size={24} color={theme.primary} />
+              <Text style={[styles.actionButtonText, { color: theme.text }]}>Products</Text>
             </TouchableOpacity>
+            
             <TouchableOpacity
-              style={styles.actionCard}
+              style={[styles.actionButton, { backgroundColor: theme.cardBg, borderWidth: 1, borderColor: theme.border }]}
               onPress={() => router.push('/(tabs)/customers')}
+              activeOpacity={0.8}
             >
-              <Ionicons name="people" size={28} color="#34C759" />
-              <ThemedText style={styles.actionText}>Customers</ThemedText>
+              <Ionicons name="people-outline" size={24} color={theme.secondary} />
+              <Text style={[styles.actionButtonText, { color: theme.text }]}>Customers</Text>
             </TouchableOpacity>
+            
             <TouchableOpacity
-              style={styles.actionCard}
+              style={[styles.actionButton, { backgroundColor: theme.cardBg, borderWidth: 1, borderColor: theme.border }]}
               onPress={() => router.push('/(tabs)/reports')}
+              activeOpacity={0.8}
             >
-              <Ionicons name="bar-chart" size={28} color="#FF9500" />
-              <ThemedText style={styles.actionText}>Reports</ThemedText>
+              <Ionicons name="bar-chart-outline" size={24} color={theme.warning} />
+              <Text style={[styles.actionButtonText, { color: theme.text }]}>Reports</Text>
             </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Low Stock Alert */}
-        {lowStockProducts.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.alertHeader}>
-              <Ionicons name="warning" size={20} color="#FF9500" />
-              <ThemedText type="subtitle" style={styles.alertTitle}>
-                Low Stock Alert
-              </ThemedText>
+          {/* Low Stock Alert */}
+          {lowStockProducts.length > 0 && (
+            <View style={styles.section}>
+              <Card style={[styles.alertCard, { backgroundColor: theme.warningBg, borderColor: theme.warning }]} variant="outlined">
+                <View style={styles.alertHeader}>
+                  <Ionicons name="warning" size={20} color={theme.warning} />
+                  <Text style={[styles.alertTitle, { color: theme.warning }]}>Low Stock Alert</Text>
+                </View>
+                <Text style={[styles.alertText, { color: theme.gray800 }]}>
+                  {lowStockProducts.length} product{lowStockProducts.length !== 1 ? 's' : ''} running low on stock.
+                </Text>
+                <Button 
+                  title="View Products" 
+                  variant="outline" 
+                  size="sm" 
+                  onPress={() => router.push('/(tabs)/products')}
+                  style={{ alignSelf: 'flex-start', marginTop: Spacing.sm, borderColor: theme.warning }}
+                  textStyle={{ color: theme.warning }}
+                />
+              </Card>
             </View>
-            <View style={styles.alertCard}>
-              <ThemedText style={styles.alertText}>
-                {lowStockProducts.length} product{lowStockProducts.length !== 1 ? 's' : ''} running low on stock
-              </ThemedText>
-              <TouchableOpacity
-                style={styles.alertButton}
-                onPress={() => router.push('/(tabs)/products')}
-              >
-                <ThemedText style={styles.alertButtonText}>View Products</ThemedText>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+          )}
 
-        {/* Recent Orders */}
-        <View style={styles.section}>
+          {/* Recent Orders */}
           <View style={styles.sectionHeader}>
-            <ThemedText type="subtitle" style={styles.sectionTitle}>
-              Recent Orders
-            </ThemedText>
-            {orders.length > 0 && (
-              <TouchableOpacity onPress={() => router.push('/(tabs)/reports')}>
-                <ThemedText style={styles.viewAllText}>View All</ThemedText>
-              </TouchableOpacity>
-            )}
+            <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>Recent Orders</Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/reports')}>
+              <Text style={[styles.viewAllText, { color: theme.primary }]}>View All</Text>
+            </TouchableOpacity>
           </View>
+
           {ordersLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#007AFF" />
-            </View>
+            <ActivityIndicator size="small" color={theme.primary} style={{ marginTop: Spacing.xl }} />
           ) : orders.length > 0 ? (
             <View style={styles.ordersList}>
               {orders.slice(0, 5).map((order) => (
-                <View key={order.id} style={styles.orderCard}>
+                <Card key={order.id} style={styles.orderCard} padding="md">
                   <View style={styles.orderHeader}>
-                    <ThemedText style={styles.orderNumber}>
-                      {order.orderNumber}
-                    </ThemedText>
-                    <ThemedText style={styles.orderTotal}>
-                      {formatCurrency(order.total)}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.orderDetails}>
-                    <ThemedText style={styles.orderDate}>
-                      {new Date(order.createdAt).toLocaleTimeString()}
-                    </ThemedText>
-                    <View style={styles.orderStatus}>
-                      <View
-                        style={[
-                          styles.statusDot,
-                          order.status === 'completed' && styles.statusDotCompleted,
-                        ]}
+                    <View style={styles.orderInfo}>
+                      <Text style={[styles.orderNumber, { color: theme.text }]}>{order.orderNumber}</Text>
+                      <Text style={[styles.orderDate, { color: theme.gray500 }]}>
+                        {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                    <View style={styles.orderAmount}>
+                      <Text style={[styles.orderTotal, { color: theme.primary }]}>{formatCurrency(order.total)}</Text>
+                      <Badge 
+                        label={order.status} 
+                        variant={order.status === 'completed' ? 'success' : 'default'} 
+                        style={{ marginTop: 4 }}
                       />
-                      <ThemedText style={styles.orderStatusText}>
-                        {order.status}
-                      </ThemedText>
                     </View>
                   </View>
-                </View>
+                </Card>
               ))}
             </View>
           ) : (
             <View style={styles.emptyState}>
-              <Ionicons name="receipt-outline" size={48} color="#ccc" />
-              <ThemedText style={styles.emptyStateText}>
-                No orders today
-              </ThemedText>
+              <Ionicons name="receipt-outline" size={48} color={theme.gray300} />
+              <Text style={[styles.emptyStateText, { color: theme.gray500 }]}>No orders today</Text>
             </View>
           )}
         </View>
       </ScrollView>
-
-      {/* Floating Action Button for New Sale */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => router.push('/(tabs)/sales')}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="cart" size={28} color="#fff" />
-      </TouchableOpacity>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -367,265 +298,201 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 80, // Extra padding for FAB
+    paddingBottom: 80,
   },
-  header: {
-    padding: 20,
-    paddingTop: 8,
-    paddingBottom: 16,
+  headerBanner: {
+    paddingTop: 60,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.xxxl,
+    borderBottomLeftRadius: BorderRadius.xl,
+    borderBottomRightRadius: BorderRadius.xl,
   },
-  greeting: {
-    fontSize: 24,
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
   },
-  userName: {
-    opacity: 0.8,
+  greetingText: {
+    fontSize: Typography.sizes.md,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
   },
-  fab: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#34C759',
+  userNameText: {
+    fontSize: Typography.sizes.xxl,
+    color: '#FFF',
+    fontWeight: '700',
+  },
+  headerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    zIndex: 999,
+  },
+  summaryContainer: {
+    marginBottom: -Spacing.xxxl,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  summaryCard: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  summaryIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#D1FAE5', // Light green
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+  },
+  summaryLabel: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  summaryValue: {
+    fontSize: Typography.sizes.xl,
+    fontWeight: '700',
+  },
+  mainContent: {
+    paddingTop: Spacing.xxxl + Spacing.md,
+    paddingHorizontal: Spacing.lg,
+  },
+  sectionTitle: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: '700',
+    marginBottom: Spacing.md,
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  actionButton: {
+    width: '47%',
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
+  },
+  actionButtonText: {
+    marginTop: Spacing.sm,
+    fontSize: Typography.sizes.sm,
+    fontWeight: '600',
+    color: '#FFF',
   },
   section: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: Spacing.xl,
+  },
+  alertCard: {
+    borderLeftWidth: 4,
+  },
+  alertHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  alertTitle: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: '700',
+  },
+  alertText: {
+    fontSize: Typography.sizes.sm,
+    marginBottom: Spacing.sm,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   viewAllText: {
-    color: '#007AFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  statCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    width: '47%',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    minHeight: 90,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    opacity: 0.6,
-    textAlign: 'center',
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  actionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    width: '47%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    minHeight: 100,
-  },
-  primaryAction: {
-    backgroundColor: '#34C759',
-    width: '100%',
-  },
-  actionText: {
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  alertHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
-  },
-  alertTitle: {
-    marginBottom: 0,
-  },
-  alertCard: {
-    backgroundColor: '#FFF4E6',
-    borderRadius: 12,
-    padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF9500',
-  },
-  alertText: {
-    marginBottom: 12,
-    fontSize: 14,
-  },
-  alertButton: {
-    backgroundColor: '#FF9500',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  alertButtonText: {
-    color: '#fff',
-    fontSize: 14,
+    fontSize: Typography.sizes.sm,
     fontWeight: '600',
   },
   ordersList: {
-    gap: 12,
+    gap: Spacing.sm,
   },
   orderCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   orderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    width: '100%',
+  },
+  orderInfo: {
+    justifyContent: 'center',
   },
   orderNumber: {
-    fontSize: 16,
+    fontSize: Typography.sizes.md,
     fontWeight: '600',
-  },
-  orderTotal: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#34C759',
-  },
-  orderDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    marginBottom: 2,
   },
   orderDate: {
-    fontSize: 12,
-    opacity: 0.6,
+    fontSize: Typography.sizes.xs,
   },
-  orderStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  orderAmount: {
+    alignItems: 'flex-end',
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ccc',
-  },
-  statusDotCompleted: {
-    backgroundColor: '#34C759',
-  },
-  orderStatusText: {
-    fontSize: 12,
-    textTransform: 'capitalize',
-    opacity: 0.8,
-  },
-  loadingContainer: {
-    padding: 20,
-    alignItems: 'center',
+  orderTotal: {
+    fontSize: Typography.sizes.md,
+    fontWeight: '700',
+    marginBottom: 2,
   },
   emptyState: {
-    padding: 32,
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    padding: Spacing.xl,
   },
   emptyStateText: {
-    marginTop: 12,
-    fontSize: 14,
-    opacity: 0.6,
-    textAlign: 'center',
+    marginTop: Spacing.md,
+    fontSize: Typography.sizes.sm,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: Spacing.xl,
   },
   errorText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+    marginTop: Spacing.md,
+    fontSize: Typography.sizes.md,
     textAlign: 'center',
   },
   loadingScreen: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
-  },
-  loadingContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   loadingIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#E8F5E9',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E0E7FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   loadingSpinner: {
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   loadingTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    marginBottom: 8,
-    textAlign: 'center',
+    fontSize: Typography.sizes.xl,
+    fontWeight: '700',
+    marginBottom: Spacing.sm,
   },
   loadingSubtitle: {
-    fontSize: 16,
-    opacity: 0.6,
-    textAlign: 'center',
-  },
-  errorSubtext: {
-    marginTop: 8,
-    fontSize: 12,
-    opacity: 0.5,
-    textAlign: 'center',
+    fontSize: Typography.sizes.md,
   },
 });

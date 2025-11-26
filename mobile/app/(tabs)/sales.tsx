@@ -5,12 +5,12 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  TextInput,
   Alert,
   RefreshControl,
   ActivityIndicator,
   Modal,
   ScrollView,
+  StatusBar,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,10 +18,18 @@ import { useProductStore } from '../../src/stores/productStore';
 import { useCartStore, CartItem } from '../../src/stores/cartStore';
 import { useOrderStore } from '../../src/stores/orderStore';
 import { useAuthStore } from '../../src/stores/authStore';
-import Product from '../../src/database/models/Product';
+import { Product } from '../../src/database/types';
+import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { Badge } from '../../components/ui/Badge';
 
 export default function SalesScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const { isAuthenticated } = useAuthStore();
   const {
     products,
@@ -146,80 +154,78 @@ export default function SalesScreen() {
     const isInCart = !!cartItem;
 
     return (
-      <TouchableOpacity
-        style={[styles.productCard, isInCart && styles.productCardInCart]}
-        onPress={() => handleAddToCart(item)}
+      <Card 
+        style={[styles.productCard, isInCart && { borderColor: theme.primary, borderWidth: 2 }]} 
+        padding="sm"
       >
-        <View style={styles.productHeader}>
-          <Text style={styles.productName}>{item.name}</Text>
-          <Text style={styles.productSku}>{item.sku}</Text>
-        </View>
-        
-        <View style={styles.productDetails}>
-          <Text style={styles.productPrice}>${item.price.toFixed(2)}</Text>
-          <Text style={styles.productStock}>
-            Stock: {item.stockQuantity} {item.unit}
-          </Text>
+        <TouchableOpacity onPress={() => handleAddToCart(item)}>
+          <View style={styles.productHeader}>
+            <Text style={[styles.productName, { color: theme.text }]} numberOfLines={2}>{item.name}</Text>
+            <Badge label={item.sku} variant="default" style={{ backgroundColor: theme.gray200 }} />
+          </View>
+          
+          <View style={styles.productDetails}>
+            <Text style={[styles.productPrice, { color: theme.primary }]}>${item.price.toFixed(2)}</Text>
+            <Text style={[styles.productStock, { color: theme.gray500 }]}>
+              {item.stockQuantity} {item.unit}
+            </Text>
+          </View>
+
           {item.isLowStock && (
-            <View style={styles.lowStockContainer}>
-              <Ionicons name="warning" size={16} color="#f59e0b" />
-              <Text style={styles.lowStockWarning}>Low Stock</Text>
-            </View>
-          )}
-        </View>
+             <View style={styles.lowStockContainer}>
+               <Ionicons name="warning" size={14} color={theme.warning} />
+               <Text style={[styles.lowStockWarning, { color: theme.warning }]}>Low Stock</Text>
+             </View>
+           )}
+        </TouchableOpacity>
         
         {isInCart && (
           <View style={styles.cartControls}>
             <TouchableOpacity
-              style={styles.quantityButton}
+              style={[styles.quantityButton, { backgroundColor: theme.primary }]}
               onPress={() => handleUpdateQuantity(item.id, cartItem.quantity - 1)}
             >
               <Ionicons name="remove" size={16} color="#fff" />
             </TouchableOpacity>
-            <Text style={styles.quantityText}>{cartItem.quantity}</Text>
+            <Text style={[styles.quantityText, { color: theme.text }]}>{cartItem.quantity}</Text>
             <TouchableOpacity
-              style={styles.quantityButton}
+              style={[styles.quantityButton, { backgroundColor: theme.primary }]}
               onPress={() => handleUpdateQuantity(item.id, cartItem.quantity + 1)}
             >
               <Ionicons name="add" size={16} color="#fff" />
             </TouchableOpacity>
           </View>
         )}
-      </TouchableOpacity>
+      </Card>
     );
   };
 
   const renderCartItem = ({ item }: { item: CartItem }) => (
-    <View style={styles.cartItem}>
+    <View style={[styles.cartItem, { borderBottomColor: theme.border }]}>
       <View style={styles.cartItemInfo}>
-        <Text style={styles.cartItemName}>{item.productName}</Text>
-        <Text style={styles.cartItemSku}>{item.sku}</Text>
-        <Text style={styles.cartItemPrice}>${item.unitPrice.toFixed(2)} each</Text>
+        <Text style={[styles.cartItemName, { color: theme.text }]}>{item.productName}</Text>
+        <Text style={[styles.cartItemPrice, { color: theme.gray500 }]}>
+          ${item.unitPrice.toFixed(2)} × {item.quantity}
+        </Text>
       </View>
       
       <View style={styles.cartItemControls}>
         <TouchableOpacity
-          style={styles.cartQuantityButton}
+          style={[styles.cartQuantityButton, { backgroundColor: theme.gray200 }]}
           onPress={() => handleUpdateQuantity(item.productId, item.quantity - 1)}
         >
-          <Ionicons name="remove" size={16} color="#fff" />
+          <Ionicons name="remove" size={16} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.cartQuantityText}>{item.quantity}</Text>
+        <Text style={[styles.cartQuantityText, { color: theme.text }]}>{item.quantity}</Text>
         <TouchableOpacity
-          style={styles.cartQuantityButton}
+          style={[styles.cartQuantityButton, { backgroundColor: theme.gray200 }]}
           onPress={() => handleUpdateQuantity(item.productId, item.quantity + 1)}
         >
-          <Ionicons name="add" size={16} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.cartRemoveButton}
-          onPress={() => handleRemoveFromCart(item.productId)}
-        >
-          <Ionicons name="trash" size={16} color="#fff" />
+          <Ionicons name="add" size={16} color={theme.text} />
         </TouchableOpacity>
       </View>
       
-      <Text style={styles.cartItemTotal}>${item.subtotal.toFixed(2)}</Text>
+      <Text style={[styles.cartItemTotal, { color: theme.text }]}>${item.subtotal.toFixed(2)}</Text>
     </View>
   );
 
@@ -229,63 +235,63 @@ export default function SalesScreen() {
       animationType="slide"
       presentationStyle="pageSheet"
     >
-      <View style={styles.checkoutContainer}>
-        <View style={styles.checkoutHeader}>
+      <View style={[styles.checkoutContainer, { backgroundColor: theme.background }]}>
+        <View style={[styles.checkoutHeader, { backgroundColor: theme.cardBg, borderBottomColor: theme.border }]}>
           <TouchableOpacity onPress={() => setShowCheckout(false)}>
-            <Text style={styles.checkoutCloseButton}>Cancel</Text>
+            <Text style={[styles.checkoutCloseButton, { color: theme.primary }]}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.checkoutTitle}>Checkout</Text>
+          <Text style={[styles.checkoutTitle, { color: theme.text }]}>Checkout</Text>
           <View style={{ width: 60 }} />
         </View>
 
         <ScrollView style={styles.checkoutContent}>
-          <View style={styles.cartSummary}>
-            <Text style={styles.cartSummaryTitle}>Order Summary</Text>
+          <Card style={styles.cartSummary} padding="lg">
+            <Text style={[styles.cartSummaryTitle, { color: theme.text }]}>Order Summary</Text>
             {cartItems.map((item) => (
               <View key={item.productId} style={styles.cartSummaryItem}>
-                <Text style={styles.cartSummaryItemName}>{item.productName}</Text>
-                <Text style={styles.cartSummaryItemDetails}>
+                <Text style={[styles.cartSummaryItemName, { color: theme.text }]}>{item.productName}</Text>
+                <Text style={[styles.cartSummaryItemDetails, { color: theme.gray500 }]}>
                   {item.quantity} × ${item.unitPrice.toFixed(2)} = ${item.subtotal.toFixed(2)}
                 </Text>
               </View>
             ))}
             
-            <View style={styles.cartSummaryTotals}>
+            <View style={[styles.cartSummaryTotals, { borderTopColor: theme.border }]}>
               <View style={styles.cartSummaryRow}>
-                <Text style={styles.cartSummaryLabel}>Subtotal:</Text>
-                <Text style={styles.cartSummaryValue}>${subtotal.toFixed(2)}</Text>
+                <Text style={[styles.cartSummaryLabel, { color: theme.gray500 }]}>Subtotal:</Text>
+                <Text style={[styles.cartSummaryValue, { color: theme.text }]}>${subtotal.toFixed(2)}</Text>
               </View>
               <View style={styles.cartSummaryRow}>
-                <Text style={styles.cartSummaryLabel}>Discount:</Text>
-                <Text style={styles.cartSummaryValue}>-${discountAmount.toFixed(2)}</Text>
+                <Text style={[styles.cartSummaryLabel, { color: theme.gray500 }]}>Discount:</Text>
+                <Text style={[styles.cartSummaryValue, { color: theme.text }]}>-${discountAmount.toFixed(2)}</Text>
               </View>
               <View style={styles.cartSummaryRow}>
-                <Text style={styles.cartSummaryLabel}>Tax:</Text>
-                <Text style={styles.cartSummaryValue}>${taxAmount.toFixed(2)}</Text>
+                <Text style={[styles.cartSummaryLabel, { color: theme.gray500 }]}>Tax:</Text>
+                <Text style={[styles.cartSummaryValue, { color: theme.text }]}>${taxAmount.toFixed(2)}</Text>
               </View>
-              <View style={[styles.cartSummaryRow, styles.cartSummaryTotal]}>
-                <Text style={styles.cartSummaryTotalLabel}>Total:</Text>
-                <Text style={styles.cartSummaryTotalValue}>${total.toFixed(2)}</Text>
+              <View style={[styles.cartSummaryRow, styles.cartSummaryTotal, { borderTopColor: theme.border }]}>
+                <Text style={[styles.cartSummaryTotalLabel, { color: theme.text }]}>Total:</Text>
+                <Text style={[styles.cartSummaryTotalValue, { color: theme.primary }]}>${total.toFixed(2)}</Text>
               </View>
             </View>
-          </View>
+          </Card>
 
           <View style={styles.paymentSection}>
-            <Text style={styles.paymentTitle}>Payment Method</Text>
+            <Text style={[styles.paymentTitle, { color: theme.text }]}>Payment Method</Text>
             <TouchableOpacity
-              style={styles.paymentButton}
+              style={[styles.paymentButton, { backgroundColor: theme.cardBg, borderColor: theme.border }]}
               onPress={() => handleProcessPayment('cash', total)}
             >
-              <Ionicons name="cash" size={24} color="#34C759" />
-              <Text style={styles.paymentButtonText}>Cash Payment</Text>
+              <Ionicons name="cash" size={24} color={theme.success} />
+              <Text style={[styles.paymentButtonText, { color: theme.text }]}>Cash Payment</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={styles.paymentButton}
+              style={[styles.paymentButton, { backgroundColor: theme.cardBg, borderColor: theme.border }]}
               onPress={() => handleProcessPayment('card', total)}
             >
-              <Ionicons name="card" size={24} color="#007AFF" />
-              <Text style={styles.paymentButtonText}>Card Payment</Text>
+              <Ionicons name="card" size={24} color={theme.primary} />
+              <Text style={[styles.paymentButtonText, { color: theme.text }]}>Card Payment</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -295,42 +301,44 @@ export default function SalesScreen() {
 
   if (!isAuthenticated) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>Please log in to access sales</Text>
+      <View style={[styles.centerContainer, { backgroundColor: theme.background }]}>
+        <Text style={[styles.errorText, { color: theme.gray500 }]}>Please log in to access sales</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Sales</Text>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+      <View style={[styles.header, { backgroundColor: theme.cardBg, borderBottomColor: theme.border }]}>
+        <Text style={[styles.title, { color: theme.text }]}>Sales</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
-            style={styles.barcodeButton}
+            style={[styles.barcodeButton, { backgroundColor: theme.infoBg, borderColor: theme.info }]}
             onPress={handleBarcodeSearch}
           >
-            <Ionicons name="barcode-outline" size={24} color="#007AFF" />
+            <Ionicons name="barcode-outline" size={24} color={theme.info} />
           </TouchableOpacity>
         </View>
       </View>
 
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
+      <View style={[styles.searchContainer, { backgroundColor: theme.cardBg }]}>
+        <Input
           placeholder="Search products..."
           value={searchQuery}
           onChangeText={handleSearch}
+          leftIcon="search"
+          containerStyle={{ marginBottom: 0 }}
         />
       </View>
 
       <View style={styles.content}>
         <View style={styles.productsSection}>
-          <Text style={styles.sectionTitle}>Products</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Products</Text>
           {productsLoading ? (
             <View style={styles.centerContainer}>
-              <ActivityIndicator size="large" color="#007AFF" />
-              <Text style={styles.loadingText}>Loading products...</Text>
+              <ActivityIndicator size="large" color={theme.primary} />
+              <Text style={[styles.loadingText, { color: theme.gray500 }]}>Loading products...</Text>
             </View>
           ) : (
             <FlatList
@@ -338,34 +346,32 @@ export default function SalesScreen() {
               renderItem={renderProduct}
               keyExtractor={(item) => item.id}
               refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+                <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} />
               }
               numColumns={2}
               contentContainerStyle={styles.productsList}
+              columnWrapperStyle={{ justifyContent: 'space-between' }}
             />
           )}
         </View>
 
-        <View style={styles.cartSection}>
-          <View style={styles.cartHeader}>
-            <Text style={styles.sectionTitle}>
-              Cart ({getItemCount()} items)
+        <View style={[styles.cartSection, { backgroundColor: theme.cardBg, borderLeftColor: theme.border }]}>
+          <View style={[styles.cartHeader, { borderBottomColor: theme.border }]}>
+            <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>
+              Cart ({getItemCount()})
             </Text>
             {cartItems.length > 0 && (
-              <TouchableOpacity
-                style={styles.clearCartButton}
-                onPress={clearCart}
-              >
-                <Text style={styles.clearCartButtonText}>Clear</Text>
+              <TouchableOpacity onPress={clearCart}>
+                <Text style={{ color: theme.error, fontWeight: '600' }}>Clear</Text>
               </TouchableOpacity>
             )}
           </View>
           
           {cartItems.length === 0 ? (
             <View style={styles.emptyCart}>
-              <Ionicons name="cart-outline" size={48} color="#ccc" />
-              <Text style={styles.emptyCartText}>Cart is empty</Text>
-              <Text style={styles.emptyCartSubtext}>Add products to start a sale</Text>
+              <Ionicons name="cart-outline" size={48} color={theme.gray300} />
+              <Text style={[styles.emptyCartText, { color: theme.gray500 }]}>Cart is empty</Text>
+              <Text style={[styles.emptyCartSubtext, { color: theme.gray400 }]}>Add products to start a sale</Text>
             </View>
           ) : (
             <FlatList
@@ -375,27 +381,22 @@ export default function SalesScreen() {
               style={styles.cartList}
             />
           )}
+          
+          {cartItems.length > 0 && (
+            <View style={[styles.cartFooter, { borderTopColor: theme.border }]}>
+              <View style={styles.cartTotals}>
+                <Text style={[styles.cartTotalLabel, { color: theme.text }]}>Total: ${total.toFixed(2)}</Text>
+              </View>
+              <Button 
+                title="Checkout" 
+                onPress={handleCheckout} 
+                loading={orderLoading}
+                style={{ minWidth: 120 }}
+              />
+            </View>
+          )}
         </View>
       </View>
-
-      {cartItems.length > 0 && (
-        <View style={styles.cartFooter}>
-          <View style={styles.cartTotals}>
-            <Text style={styles.cartTotalLabel}>Total: ${total.toFixed(2)}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.checkoutButton}
-            onPress={handleCheckout}
-            disabled={orderLoading}
-          >
-            {orderLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.checkoutButtonText}>Checkout</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
 
       {renderCheckoutModal()}
     </View>
@@ -405,45 +406,30 @@ export default function SalesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
+    padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: Typography.sizes.xxl,
+    fontWeight: '700',
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: Spacing.sm,
   },
   barcodeButton: {
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: '#f0f8ff',
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: '#007AFF',
   },
   searchContainer: {
-    padding: 16,
-    backgroundColor: '#fff',
-  },
-  searchInput: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    backgroundColor: '#f9f9f9',
+    padding: Spacing.lg,
+    paddingBottom: Spacing.sm,
   },
   content: {
     flex: 1,
@@ -451,86 +437,64 @@ const styles = StyleSheet.create({
   },
   productsSection: {
     flex: 1,
-    padding: 16,
+    padding: Spacing.lg,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: Typography.sizes.lg,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   productsList: {
-    paddingBottom: 16,
+    paddingBottom: Spacing.lg,
   },
   productCard: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    marginHorizontal: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    flex: 1,
-  },
-  productCardInCart: {
-    borderColor: '#34C759',
-    borderWidth: 2,
+    width: '48%',
+    marginBottom: Spacing.md,
+    justifyContent: 'space-between',
   },
   productHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   productName: {
-    fontSize: 14,
+    fontSize: Typography.sizes.sm,
     fontWeight: '600',
-    color: '#333',
-    flex: 1,
-  },
-  productSku: {
-    fontSize: 10,
-    color: '#666',
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    borderRadius: 4,
+    marginBottom: Spacing.xs,
+    height: 40,
   },
   productDetails: {
-    marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
   },
   productPrice: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#34C759',
-    marginBottom: 4,
+    fontSize: Typography.sizes.md,
+    fontWeight: '700',
   },
   productStock: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: Typography.sizes.xs,
   },
   lowStockContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: Spacing.xs,
+    gap: 4,
   },
   lowStockWarning: {
-    fontSize: 10,
-    color: '#f59e0b',
+    fontSize: Typography.sizes.xs,
     fontWeight: '600',
-    marginLeft: 4,
   },
   cartControls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
   },
   quantityButton: {
-    backgroundColor: '#34C759',
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -538,88 +502,64 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   quantityText: {
-    fontSize: 14,
+    fontSize: Typography.sizes.sm,
     fontWeight: '600',
-    color: '#333',
     minWidth: 20,
     textAlign: 'center',
   },
   cartSection: {
-    width: 300,
-    backgroundColor: '#fff',
+    width: 320,
     borderLeftWidth: 1,
-    borderLeftColor: '#e0e0e0',
   },
   cartHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  clearCartButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#FF3B30',
-    borderRadius: 4,
-  },
-  clearCartButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
   },
   emptyCart: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: Spacing.xl,
   },
   emptyCartText: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 8,
+    fontSize: Typography.sizes.md,
+    marginTop: Spacing.md,
   },
   emptyCartSubtext: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 4,
+    fontSize: Typography.sizes.sm,
+    marginTop: Spacing.xs,
   },
   cartList: {
     flex: 1,
-    padding: 16,
+    padding: Spacing.lg,
   },
   cartItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   cartItemInfo: {
-    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.xs,
   },
   cartItemName: {
-    fontSize: 14,
+    fontSize: Typography.sizes.sm,
     fontWeight: '600',
-    color: '#333',
-  },
-  cartItemSku: {
-    fontSize: 12,
-    color: '#666',
+    flex: 1,
   },
   cartItemPrice: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: Typography.sizes.xs,
   },
   cartItemControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginHorizontal: 8,
+    justifyContent: 'space-between',
+    marginTop: Spacing.xs,
   },
   cartQuantityButton: {
-    backgroundColor: '#007AFF',
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -627,94 +567,58 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cartQuantityText: {
-    fontSize: 14,
+    fontSize: Typography.sizes.sm,
     fontWeight: '600',
-    color: '#333',
-    minWidth: 20,
-    textAlign: 'center',
-  },
-  cartRemoveButton: {
-    backgroundColor: '#FF3B30',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginHorizontal: Spacing.sm,
   },
   cartItemTotal: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    minWidth: 60,
+    fontSize: Typography.sizes.sm,
+    fontWeight: '700',
     textAlign: 'right',
+    marginTop: Spacing.xs,
   },
   cartFooter: {
+    padding: Spacing.lg,
+    borderTopWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    justifyContent: 'space-between',
   },
   cartTotals: {
     flex: 1,
   },
   cartTotalLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  checkoutButton: {
-    backgroundColor: '#34C759',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 100,
-  },
-  checkoutButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: Typography.sizes.lg,
+    fontWeight: '700',
   },
   checkoutContainer: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   checkoutHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
+    padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
   },
   checkoutCloseButton: {
-    fontSize: 16,
-    color: '#007AFF',
+    fontSize: Typography.sizes.md,
   },
   checkoutTitle: {
-    fontSize: 18,
+    fontSize: Typography.sizes.lg,
     fontWeight: '600',
-    color: '#333',
   },
   checkoutContent: {
     flex: 1,
-    padding: 16,
+    padding: Spacing.lg,
   },
   cartSummary: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   cartSummaryTitle: {
-    fontSize: 18,
+    fontSize: Typography.sizes.lg,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   cartSummaryItem: {
     flexDirection: 'row',
@@ -723,19 +627,16 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   cartSummaryItemName: {
-    fontSize: 14,
-    color: '#333',
+    fontSize: Typography.sizes.sm,
     flex: 1,
   },
   cartSummaryItemDetails: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: Typography.sizes.xs,
   },
   cartSummaryTotals: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
   },
   cartSummaryRow: {
     flexDirection: 'row',
@@ -744,70 +645,58 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   cartSummaryLabel: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: Typography.sizes.sm,
   },
   cartSummaryValue: {
-    fontSize: 14,
-    color: '#333',
+    fontSize: Typography.sizes.sm,
     fontWeight: '500',
   },
   cartSummaryTotal: {
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    paddingTop: 8,
-    marginTop: 8,
+    paddingTop: Spacing.sm,
+    marginTop: Spacing.sm,
   },
   cartSummaryTotalLabel: {
-    fontSize: 16,
+    fontSize: Typography.sizes.md,
     fontWeight: '600',
-    color: '#333',
   },
   cartSummaryTotalValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#34C759',
+    fontSize: Typography.sizes.lg,
+    fontWeight: '700',
   },
   paymentSection: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 16,
+    marginBottom: Spacing.xl,
   },
   paymentTitle: {
-    fontSize: 18,
+    fontSize: Typography.sizes.lg,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   paymentButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-    marginBottom: 8,
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.sm,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
   },
   paymentButtonText: {
-    fontSize: 16,
+    fontSize: Typography.sizes.md,
     fontWeight: '600',
-    color: '#333',
-    marginLeft: 12,
+    marginLeft: Spacing.md,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+    padding: Spacing.xl,
   },
   errorText: {
-    fontSize: 18,
-    color: '#FF3B30',
+    fontSize: Typography.sizes.md,
+    textAlign: 'center',
+  },
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: Typography.sizes.md,
   },
 });
