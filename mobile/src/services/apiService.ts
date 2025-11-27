@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
+import secureStorage from './secureStorage';
 import { config } from '../config';
 
 const API_BASE_URL = __DEV__ 
@@ -28,11 +29,18 @@ class ApiService {
   private baseUrl: string;
   private authToken: string | null = null;
   private tokenRestorePromise: Promise<void> | null = null;
+  private isRefreshing = false;
+  private refreshSubscribers: ((token: string) => void)[] = [];
+  private sessionExpiredCallback: (() => void) | null = null;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
     // Restore token from storage on initialization
     this.tokenRestorePromise = this.restoreToken();
+  }
+
+  setSessionExpiredCallback(callback: () => void) {
+    this.sessionExpiredCallback = callback;
   }
 
   // Ensure token is restored before making requests
@@ -45,18 +53,18 @@ class ApiService {
 
   async setAuthToken(token: string) {
     this.authToken = token;
-    // Persist token to storage
+    // Persist token to secure storage
     if (token) {
       try {
-        await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
-        console.log('[API_SERVICE] Token saved to storage');
+        await secureStorage.setItem(AUTH_TOKEN_KEY, token);
+        console.log('[API_SERVICE] Token saved to secure storage');
       } catch (error) {
         console.error('[API_SERVICE] Failed to save token to storage:', error);
       }
     } else {
       // Clear token from storage
       try {
-        await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+        await secureStorage.removeItem(AUTH_TOKEN_KEY);
         console.log('[API_SERVICE] Token removed from storage');
       } catch (error) {
         console.error('[API_SERVICE] Failed to remove token from storage:', error);
@@ -66,12 +74,8 @@ class ApiService {
 
   async restoreToken() {
     try {
-      console.log('[API_SERVICE] Restoring token from storage', {
-        storageKey: AUTH_TOKEN_KEY,
-        configAuthTokenKey: config.authTokenKey,
-        envValue: process.env.EXPO_PUBLIC_AUTH_TOKEN_KEY
-      });
-      const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+      console.log('[API_SERVICE] Restoring token from secure storage');
+      const token = await secureStorage.getItem(AUTH_TOKEN_KEY);
       if (token) {
         this.authToken = token;
         console.log('[API_SERVICE] Token restored from storage', {
@@ -79,19 +83,26 @@ class ApiService {
           tokenPrefix: token.substring(0, 20) + '...'
         });
       } else {
-        console.log('[API_SERVICE] No token found in storage', {
-          storageKey: AUTH_TOKEN_KEY,
-          configAuthTokenKey: config.authTokenKey
-        });
+        console.log('[API_SERVICE] No token found in storage');
       }
     } catch (error) {
       console.error('[API_SERVICE] Failed to restore token from storage:', error);
     }
   }
 
+  private onRefreshed(token: string) {
+    this.refreshSubscribers.forEach((callback) => callback(token));
+    this.refreshSubscribers = [];
+  }
+
+  private addRefreshSubscriber(callback: (token: string) => void) {
+    this.refreshSubscribers.push(callback);
+  }
+
   private async makeRequest<T = any>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    isRetry = false
   ): Promise<T> {
     // Ensure token is restored before making the request
     await this.ensureTokenRestored();
@@ -126,10 +137,7 @@ class ApiService {
       url,
       method: options.method || 'GET',
       hasAuthToken: !!this.authToken,
-      authTokenLength: this.authToken?.length || 0,
-      authTokenPrefix: this.authToken ? `${this.authToken.substring(0, 20)}...` : 'none',
-      hasAuthorizationHeader: !!headers.Authorization,
-      hasBody: !!options.body
+      isRetry
     });
 
     try {
@@ -138,10 +146,62 @@ class ApiService {
         headers,
       });
 
+      // Handle 401 Unauthorized (Token Expired)
+      if (response.status === 401 && !isAuthEndpoint && !isRetry) {
+        console.log('[API_SERVICE] 401 Unauthorized received. Attempting refresh...');
+        
+        if (this.isRefreshing) {
+          // If already refreshing, wait for the new token
+          return new Promise((resolve) => {
+            this.addRefreshSubscriber((token) => {
+              // Retry the request with the new token
+              resolve(
+                this.makeRequest<T>(endpoint, options, true)
+              );
+            });
+          });
+        }
+
+        this.isRefreshing = true;
+
+        try {
+          // Check network status before refreshing
+          const netInfo = await NetInfo.fetch();
+          if (!netInfo.isConnected) {
+            console.warn('[API_SERVICE] Offline, cannot refresh token.');
+            throw new Error('Offline: Cannot refresh token');
+          }
+
+          // Call refresh token endpoint
+          const refreshResponse = await this.refreshToken();
+          
+          if (refreshResponse.success && refreshResponse.data?.accessToken) {
+            const newToken = refreshResponse.data.accessToken;
+            await this.setAuthToken(newToken);
+            this.isRefreshing = false;
+            this.onRefreshed(newToken);
+            
+            // Retry original request
+            return this.makeRequest<T>(endpoint, options, true);
+          } else {
+            console.error('[API_SERVICE] Token refresh failed');
+            this.isRefreshing = false;
+            await this.setAuthToken(''); // Clear token
+            this.sessionExpiredCallback?.();
+            throw new Error('Session expired. Please login again.');
+          }
+        } catch (refreshError) {
+          this.isRefreshing = false;
+          console.error('[API_SERVICE] Error during token refresh:', refreshError);
+          await this.setAuthToken(''); // Clear token
+          this.sessionExpiredCallback?.();
+          throw refreshError;
+        }
+      }
+
       console.log('[API_SERVICE] HTTP response received', {
         url,
         status: response.status,
-        statusText: response.statusText,
         ok: response.ok
       });
 
@@ -151,80 +211,42 @@ class ApiService {
         
         console.error('[API_SERVICE] HTTP error response', {
           status: response.status,
-          statusText: response.statusText,
           errorData,
           endpoint
         });
         
         // Check if error is due to invalid storeId format (400 error)
-        // This indicates the JWT token has an invalid storeId and user needs to re-login
         if (response.status === 400 && (
           errorMessage.includes('Invalid store ID format') || 
           errorMessage.includes('Invalid storeId format') ||
           errorMessage.includes('Store ID not found')
         )) {
-          console.error('[API_SERVICE] Token contains invalid storeId. User must log out and log back in to get a new token.');
-          console.warn('[API_SERVICE] The current token was issued before the backend fix. Please log out and log back in.');
+          console.error('[API_SERVICE] Token contains invalid storeId. User must log out and log back in.');
         }
         
         throw new Error(errorMessage);
       }
 
       const data: T = await response.json() as T;
-      console.log('[API_SERVICE] Response parsed successfully', {
-        url,
-        hasData: !!data
-      });
       return data;
     } catch (error) {
       // Enhanced error logging for network errors
       const errorDetails: any = {
         url,
         errorMessage: error instanceof Error ? error.message : String(error),
-        errorType: error instanceof Error ? error.constructor.name : typeof error,
       };
 
-      // Try to extract more details from the error
-      if (error instanceof Error) {
-        errorDetails.errorName = error.name;
-        errorDetails.errorStack = error.stack;
-        
-        // Check for network-specific error properties
-        if ('cause' in error) {
-          errorDetails.errorCause = error.cause;
-        }
-        
-        // For TypeErrors (often network errors)
-        if (error instanceof TypeError) {
-          errorDetails.isNetworkError = true;
-          errorDetails.networkErrorDetails = {
-            message: error.message,
-            code: (error as any).code,
-            errno: (error as any).errno,
-            syscall: (error as any).syscall,
-            address: (error as any).address,
-            port: (error as any).port
-          };
-        }
+      // For TypeErrors (often network errors)
+      if (error instanceof TypeError) {
+        errorDetails.isNetworkError = true;
       }
 
-      // Log the full error object
-      console.error('[API_SERVICE] Request error details:', JSON.stringify(errorDetails, null, 2));
-      console.error('[API_SERVICE] Raw error object:', error);
-      
-      // Also log individual properties
-      if (error instanceof Error) {
-        console.error('[API_SERVICE] Error properties:', {
-          name: error.name,
-          message: error.message,
-          stack: error.stack?.substring(0, 500) // First 500 chars of stack
-        });
-      }
+      console.error('[API_SERVICE] Request error:', JSON.stringify(errorDetails, null, 2));
 
       // Create a more descriptive error message
       let errorMessage = 'Network request failed';
       if (error instanceof TypeError && error.message.includes('Network request failed')) {
-        errorMessage = `Cannot connect to server at ${url}. Please check:\n1. Backend server is running\n2. Correct IP address (${this.baseUrl})\n3. Network connectivity\n4. Firewall settings`;
+        errorMessage = `Cannot connect to server at ${url}. Please check your connection.`;
       } else if (error instanceof Error) {
         errorMessage = error.message;
       }
@@ -246,61 +268,18 @@ class ApiService {
   }
 
   async login(email: string, password: string, rememberMe: boolean = false) {
-    console.log('[API_SERVICE] Login request initiated', {
-      email,
-      rememberMe,
-      baseUrl: this.baseUrl,
-      endpoint: '/api/auth/login'
-    });
+    console.log('[API_SERVICE] Login request initiated');
 
     try {
-      const url = `${this.baseUrl}/api/auth/login`;
-      console.log('[API_SERVICE] Making request to:', url);
-
       const requestBody = { email, password, rememberMe };
-      console.log('[API_SERVICE] Request body prepared', {
-        email: requestBody.email,
-        rememberMe: requestBody.rememberMe,
-        hasPassword: !!requestBody.password
-      });
-
       const response = await this.makeRequest('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify(requestBody),
       });
 
-      console.log('[API_SERVICE] Login response received', {
-        success: response.success,
-        hasData: !!response.data,
-        message: response.message
-      });
-
       return response;
     } catch (error) {
-      // Enhanced error logging with full error details
-      const errorInfo: any = {
-        baseUrl: this.baseUrl,
-        endpoint: '/api/auth/login',
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorType: error instanceof Error ? error.constructor.name : typeof error,
-      };
-
-      if (error instanceof Error) {
-        errorInfo.errorName = error.name;
-        errorInfo.errorStack = error.stack?.substring(0, 1000); // First 1000 chars
-        
-        if (error instanceof TypeError) {
-          errorInfo.isNetworkError = true;
-          errorInfo.networkDetails = {
-            message: error.message,
-            code: (error as any).code,
-          };
-        }
-      }
-
-      console.error('[API_SERVICE] Login request failed:', JSON.stringify(errorInfo, null, 2));
-      console.error('[API_SERVICE] Full error object:', error);
-      
+      console.error('[API_SERVICE] Login request failed:', error);
       throw error;
     }
   }
@@ -320,12 +299,29 @@ class ApiService {
   }
 
   async logout() {
-    return this.makeRequest('/api/auth/logout', {
-      method: 'POST',
-    });
+    try {
+      return await this.makeRequest('/api/auth/logout', {
+        method: 'POST',
+      });
+    } finally {
+      await this.setAuthToken('');
+    }
   }
 
   async refreshToken() {
+    // Note: This calls the refresh endpoint. The actual token update happens in makeRequest or caller.
+    // But since we use makeRequest here, and makeRequest checks for 401, we need to be careful.
+    // The refresh endpoint itself might return 401 if refresh token is expired.
+    // So we should probably use a raw fetch here to avoid circular dependency in makeRequest logic,
+    // OR ensure makeRequest doesn't try to refresh if the endpoint IS refresh-token.
+    // I added !isAuthEndpoint check in makeRequest, but refresh-token IS an auth endpoint.
+    // So makeRequest won't try to refresh if this call fails with 401. Correct.
+    
+    // However, we need to pass the refresh token. 
+    // Usually refresh token is in HttpOnly cookie. If so, fetch automatically sends it.
+    // If it's in body/header, we need to send it.
+    // Assuming cookie based on previous code not sending it explicitly.
+    
     return this.makeRequest('/api/auth/refresh-token', {
       method: 'POST',
     });
@@ -423,7 +419,7 @@ class ApiService {
     });
   }
 
-  // Order endpoints (to be implemented)
+  // Order endpoints
   async getOrders(params: {
     startDate?: string;
     endDate?: string;

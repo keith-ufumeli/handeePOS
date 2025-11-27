@@ -1,17 +1,22 @@
 import { Redirect } from 'expo-router';
 import { useEffect } from 'react';
 import { useAuthStore } from '../src/stores/authStore';
+import { View, ActivityIndicator } from 'react-native';
 
 export default function Index() {
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading, isHydrated } = useAuthStore();
 
   useEffect(() => {
-    console.log('Root index.tsx is loading - checking auth state');
-  }, []);
+    console.log('Root index.tsx is loading - checking auth state', { isHydrated, isAuthenticated });
+  }, [isHydrated, isAuthenticated]);
 
-  // Show nothing while checking authentication
-  if (isLoading) {
-    return null;
+  // Show loading while checking authentication and hydration
+  if (isLoading || !isHydrated) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
   }
 
   // Redirect based on authentication state

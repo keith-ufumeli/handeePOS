@@ -272,3 +272,5 @@ test-results/
 # Misc
 *.tgz
 *.tar.gz
+
+stitch_inventory_management/

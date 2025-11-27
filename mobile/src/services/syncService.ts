@@ -3,7 +3,7 @@ import { SyncOperation, SyncQueueItem } from '../database/types';
 import { getDatabase, generateId } from '../database';
 import { products, categories, syncQueue } from '../database/schema';
 import { eq } from 'drizzle-orm';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import secureStorage from './secureStorage';
 import { config } from '../config';
 
 interface ApiResponse<T = any> {
@@ -42,7 +42,7 @@ class SyncService {
 
   async restoreToken() {
     try {
-      const token = await AsyncStorage.getItem(this.AUTH_TOKEN_KEY);
+      const token = await secureStorage.getItem(this.AUTH_TOKEN_KEY);
       if (token) {
         this.authToken = token;
         console.log('[SYNC_SERVICE] Token restored from storage');
@@ -58,11 +58,11 @@ class SyncService {
     this.authToken = token;
     // Also persist token to storage
     if (token) {
-      AsyncStorage.setItem(this.AUTH_TOKEN_KEY, token).catch((error) => {
+      secureStorage.setItem(this.AUTH_TOKEN_KEY, token).catch((error) => {
         console.error('[SYNC_SERVICE] Failed to save token to storage:', error);
       });
     } else {
-      AsyncStorage.removeItem(this.AUTH_TOKEN_KEY).catch((error) => {
+      secureStorage.removeItem(this.AUTH_TOKEN_KEY).catch((error) => {
         console.error('[SYNC_SERVICE] Failed to remove token from storage:', error);
       });
     }

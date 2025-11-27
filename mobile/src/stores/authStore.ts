@@ -27,6 +27,7 @@ export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isHydrated: boolean;
   error: string | null;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   logout: () => Promise<void>;
@@ -40,6 +41,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAuthenticated: false,
       isLoading: false,
+      isHydrated: false,
       error: null,
 
       // Initialize: restore token when store is rehydrated
@@ -322,6 +324,11 @@ export const useAuthStore = create<AuthState>()(
         isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {
+        console.log('[AUTH_STORE] Hydration finished');
+        if (state) {
+          state.isHydrated = true;
+        }
+        
         // Restore token when store is rehydrated
         if (state?.isAuthenticated && state?.user) {
           console.log('[AUTH_STORE] Store rehydrated, restoring token');
@@ -333,6 +340,37 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
-// Also restore token immediately on module load (before store rehydration)
-// This ensures token is available for early API calls
-apiService.restoreToken();
+// Register callback to handle session expiry from API service
+apiService.setSessionExpiredCallback(() => {
+  console.log('[AUTH_STORE] Session expired callback triggered');
+  useAuthStore.getState().logout();
+});
+
+// Initialize auth state on app launch
+export const initializeAuth = async () => {
+  console.log('[AUTH_STORE] Initializing auth state...');
+  await apiService.restoreToken();
+  
+  // If we have a user in state but no token in secure storage (and restoreToken didn't find one),
+  // we should probably logout to be safe, OR trust the state if we support offline without token (unlikely for API calls).
+  // But for now, let's assume if we are authenticated, we expect a token.
+  
+  // Note: restoreToken sets the token in apiService if found.
+  // We can't easily check apiService.authToken here without exposing a getter, 
+  // but apiService handles the token internally.
+  
+  // If we want to verify the session on launch:
+  const state = useAuthStore.getState();
+  if (state.isAuthenticated) {
+    try {
+      // Optionally verify token with a lightweight call, e.g. getMe()
+      // But we might be offline, so we shouldn't force logout if this fails due to network.
+      // apiService.getMe().catch(err => console.warn('Auth check failed', err));
+    } catch (e) {
+      console.warn('[AUTH_STORE] Failed to verify session on launch', e);
+    }
+  }
+};
+
+// Call initialization
+initializeAuth();
