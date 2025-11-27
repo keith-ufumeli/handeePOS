@@ -11,7 +11,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../src/stores/productStore';
-import Product from '../../src/database/models/Product';
+import { Product } from '../../src/database/types';
 
 export default function ProductDetailScreen() {
   const router = useRouter();
@@ -159,7 +159,7 @@ export default function ProductDetailScreen() {
 
           <View style={styles.productRow}>
             <Text style={styles.label}>Profit Margin:</Text>
-            <Text style={styles.value}>{product.profitMargin.toFixed(1)}%</Text>
+            <Text style={styles.value}>{(product.profitMargin ?? 0).toFixed(1)}%</Text>
           </View>
 
           <View style={styles.productRow}>
@@ -205,12 +205,12 @@ export default function ProductDetailScreen() {
           <View style={styles.productRow}>
             <Text style={styles.label}>Sync Status:</Text>
             <View style={styles.syncStatusContainer}>
-              {product.syncStatusValue === 'synced' ? (
+              {product.syncStatus === 'synced' ? (
                 <View style={styles.syncStatusRow}>
                   <Ionicons name="checkmark-circle" size={16} color="#10b981" />
                   <Text style={styles.syncStatusText}>Synced</Text>
                 </View>
-              ) : product.syncStatusValue === 'pending' ? (
+              ) : product.syncStatus === 'pending' ? (
                 <View style={styles.syncStatusRow}>
                   <Ionicons name="time" size={16} color="#f59e0b" />
                   <Text style={styles.syncStatusText}>Pending</Text>
