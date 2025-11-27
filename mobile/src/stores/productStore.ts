@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import * as dbHelpers from '../database/db-helpers';
 import { Product, Category } from '../database/types';
-import SyncService from '../services/syncService';
-import { API_CONFIG } from '../config/api';
+import syncService from '../services/syncService';
 
 export interface ProductFilters {
   search?: string;
@@ -24,7 +23,7 @@ export interface ProductState {
     total: number;
     pages: number;
   };
-  
+
   // Actions
   loadProducts: (filters?: ProductFilters) => Promise<void>;
   loadCategories: () => Promise<void>;
@@ -40,8 +39,7 @@ export interface ProductState {
   clearError: () => void;
 }
 
-// Create sync service instance
-const syncService = new SyncService(API_CONFIG.BASE_URL);
+// Sync service is imported as singleton
 
 export const useProductStore = create<ProductState>((set, get) => ({
   products: [],
@@ -58,7 +56,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
   loadProducts: async (filters = {}) => {
     set({ isLoading: true, error: null });
-    
+
     try {
       const products = await dbHelpers.getAllProducts(filters);
       set({
@@ -90,7 +88,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
   searchProducts: async (query: string) => {
     set({ isLoading: true, error: null });
-    
+
     try {
       const products = await dbHelpers.getAllProducts({ search: query });
       set({
@@ -125,7 +123,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
   createProduct: async (data: any) => {
     set({ isLoading: true, error: null });
-    
+
     try {
       const product = await dbHelpers.createProduct({
         name: data.name,
@@ -146,7 +144,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
       // Reload products
       await get().loadProducts(get().filters);
-      
+
       set({ isLoading: false });
     } catch (error) {
       set({
@@ -158,7 +156,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
   updateProduct: async (id: string, data: any) => {
     set({ isLoading: true, error: null });
-    
+
     try {
       await dbHelpers.updateProduct(id, {
         name: data.name,
@@ -179,7 +177,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
       // Reload products
       await get().loadProducts(get().filters);
-      
+
       set({ isLoading: false });
     } catch (error) {
       set({
@@ -191,7 +189,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
   deleteProduct: async (id: string) => {
     set({ isLoading: true, error: null });
-    
+
     try {
       await dbHelpers.deleteProduct(id);
 
@@ -200,7 +198,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
       // Reload products
       await get().loadProducts(get().filters);
-      
+
       set({ isLoading: false });
     } catch (error) {
       set({
@@ -212,7 +210,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
   updateStock: async (id: string, stockQuantity: number, reason?: string) => {
     set({ isLoading: true, error: null });
-    
+
     try {
       await dbHelpers.updateProduct(id, { stockQuantity });
 
@@ -224,7 +222,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
       // Reload products
       await get().loadProducts(get().filters);
-      
+
       set({ isLoading: false });
     } catch (error) {
       set({
@@ -236,12 +234,11 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
   syncProducts: async () => {
     set({ isLoading: true, error: null });
-    
+
     try {
-      // Ensure token is restored before syncing
-      await syncService.restoreToken();
+      // Token is handled by ApiService
       const result = await syncService.syncAll();
-      
+
       if (result.success) {
         // Reload products after sync
         await get().loadProducts(get().filters);
@@ -251,7 +248,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
           error: `Sync failed: ${result.errors.join(', ')}`,
         });
       }
-      
+
       set({ isLoading: false });
     } catch (error) {
       set({

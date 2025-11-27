@@ -3,15 +3,7 @@ import { SyncOperation, SyncQueueItem } from '../database/types';
 import { getDatabase, generateId } from '../database';
 import { products, categories, syncQueue } from '../database/schema';
 import { eq } from 'drizzle-orm';
-import secureStorage from './secureStorage';
-import { config } from '../config';
-
-interface ApiResponse<T = any> {
-  success: boolean;
-  data?: T;
-  message?: string;
-  error?: string;
-}
+import apiService, { ApiResponse } from './apiService';
 
 export interface SyncResult {
   success: boolean;
@@ -21,130 +13,6 @@ export interface SyncResult {
 }
 
 class SyncService {
-  private baseUrl: string;
-  private authToken: string | null = null;
-  private tokenRestorePromise: Promise<void> | null = null;
-  private readonly AUTH_TOKEN_KEY = config.authTokenKey;
-
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
-    // Restore token from storage on initialization
-    this.tokenRestorePromise = this.restoreToken();
-  }
-
-  // Ensure token is restored before making requests
-  private async ensureTokenRestored() {
-    if (this.tokenRestorePromise) {
-      await this.tokenRestorePromise;
-      this.tokenRestorePromise = null;
-    }
-  }
-
-  async restoreToken() {
-    try {
-      const token = await secureStorage.getItem(this.AUTH_TOKEN_KEY);
-      if (token) {
-        this.authToken = token;
-        console.log('[SYNC_SERVICE] Token restored from storage');
-      } else {
-        console.log('[SYNC_SERVICE] No token found in storage');
-      }
-    } catch (error) {
-      console.error('[SYNC_SERVICE] Failed to restore token from storage:', error);
-    }
-  }
-
-  setAuthToken(token: string) {
-    this.authToken = token;
-    // Also persist token to storage
-    if (token) {
-      secureStorage.setItem(this.AUTH_TOKEN_KEY, token).catch((error) => {
-        console.error('[SYNC_SERVICE] Failed to save token to storage:', error);
-      });
-    } else {
-      secureStorage.removeItem(this.AUTH_TOKEN_KEY).catch((error) => {
-        console.error('[SYNC_SERVICE] Failed to remove token from storage:', error);
-      });
-    }
-  }
-
-  private async makeRequest(endpoint: string, options: RequestInit = {}) {
-    // Ensure token is restored before making the request
-    await this.ensureTokenRestored();
-    
-    // Double-check token is available
-    if (!this.authToken) {
-      // Try restoring one more time
-      await this.restoreToken();
-    }
-    
-    const url = `${this.baseUrl}${endpoint}`;
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(this.authToken && { Authorization: `Bearer ${this.authToken}` }),
-      ...options.headers,
-    };
-
-    // Warn if making authenticated request without token
-    const isAuthEndpoint = endpoint.includes('/auth/');
-    if (!isAuthEndpoint && !this.authToken) {
-      console.warn('[SYNC_SERVICE] Making request without auth token:', endpoint);
-    }
-
-    console.log('[SYNC_SERVICE] Making request:', {
-      endpoint,
-      url,
-      hasToken: !!this.authToken,
-      method: options.method || 'GET'
-    });
-
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
-
-      console.log('[SYNC_SERVICE] Response received:', {
-        endpoint,
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok
-      });
-
-      if (!response.ok) {
-        const errorData: any = await response.json().catch(() => ({}));
-        const errorMessage = errorData?.message || errorData?.error || `HTTP ${response.status}: ${response.statusText}`;
-        
-        console.error('[SYNC_SERVICE] Request failed:', {
-          endpoint,
-          status: response.status,
-          statusText: response.statusText,
-          errorData,
-          errorMessage
-        });
-        
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
-      console.log('[SYNC_SERVICE] Request successful:', {
-        endpoint,
-        hasData: !!data,
-        dataType: typeof data,
-        isArray: Array.isArray(data)
-      });
-      
-      return data;
-    } catch (error) {
-      console.error('[SYNC_SERVICE] Request error:', {
-        endpoint,
-        error: error instanceof Error ? error.message : String(error),
-        errorName: error instanceof Error ? error.name : typeof error
-      });
-      throw error;
-    }
-  }
-
   /**
    * Sync all pending changes to server
    */
@@ -169,7 +37,7 @@ class SyncService {
             operation: item.operation,
             documentId: item.documentId
           });
-          
+
           // Mark as syncing
           await dbHelpers.updateSyncQueueItem(item.id, { status: 'syncing' });
 
@@ -183,7 +51,7 @@ class SyncService {
           result.failedCount++;
           const errorMessage = error instanceof Error ? error.message : String(error);
           result.errors.push(`Failed to sync ${item.collection} ${item.documentId}: ${errorMessage}`);
-          
+
           console.error('[SYNC_SERVICE] Sync queue item failed:', {
             id: item.id,
             collection: item.collection,
@@ -192,7 +60,7 @@ class SyncService {
             error: errorMessage,
             errorStack: error instanceof Error ? error.stack?.substring(0, 500) : undefined
           });
-          
+
           // Mark as failed and increment retry count
           await dbHelpers.updateSyncQueueItem(item.id, {
             status: 'failed',
@@ -201,7 +69,7 @@ class SyncService {
           });
         }
       }
-      
+
       console.log('[SYNC_SERVICE] Sync queue processing complete. Starting pullFromServer...');
 
       // Pull latest data from server
@@ -219,16 +87,16 @@ class SyncService {
    */
   private async syncQueueItem(item: SyncQueueItem): Promise<void> {
     const data = item.syncData;
-    
+
     switch (item.collection) {
       case 'products':
-        await this.syncProduct(item.operation, data);
+        await this.syncProduct(item.operation, data, item.documentId);
         break;
       case 'categories':
-        await this.syncCategory(item.operation, data);
+        await this.syncCategory(item.operation, data, item.documentId);
         break;
       case 'orders':
-        await this.syncOrder(item.operation, data);
+        await this.syncOrder(item.operation, data, item.documentId);
         break;
       default:
         throw new Error(`Unknown collection: ${item.collection}`);
@@ -238,24 +106,46 @@ class SyncService {
   /**
    * Sync product to server
    */
-  private async syncProduct(operation: SyncOperation, data: any): Promise<void> {
+  private async syncProduct(operation: SyncOperation, data: any, documentId: string): Promise<void> {
+    const db = await getDatabase();
+
+    // For update/delete, we need the serverId. 
+    // Look it up from the local database to ensure we have the latest one (in case it was just created/synced).
+    let serverId = data.serverId || data.id;
+
+    if (operation !== 'create') {
+      const localProduct = await db.select().from(products).where(eq(products.id, documentId)).limit(1);
+      if (localProduct.length > 0 && localProduct[0].serverId) {
+        serverId = localProduct[0].serverId;
+      }
+    }
+
     switch (operation) {
       case 'create':
-        await this.makeRequest('/api/products', {
-          method: 'POST',
-          body: JSON.stringify(data),
-        });
+        const createResponse = await apiService.post('/api/products', data) as any;
+
+        // Update local product with serverId
+        if (createResponse && (createResponse.id || createResponse._id)) {
+          const newServerId = createResponse.id || createResponse._id;
+          await db.update(products)
+            .set({
+              serverId: newServerId,
+              syncStatus: 'synced',
+              lastSyncedAt: Date.now()
+            })
+            .where(eq(products.id, documentId));
+        }
         break;
       case 'update':
-        await this.makeRequest(`/api/products/${data.serverId || data.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(data),
-        });
+        if (!serverId) throw new Error('Cannot update product: Missing serverId');
+        await apiService.put(`/api/products/${serverId}`, data);
         break;
       case 'delete':
-        await this.makeRequest(`/api/products/${data.serverId || data.id}`, {
-          method: 'DELETE',
-        });
+        if (!serverId) {
+          console.warn('[SYNC_SERVICE] Cannot delete product: Missing serverId. It may have not been synced yet.');
+          return;
+        }
+        await apiService.delete(`/api/products/${serverId}`);
         break;
     }
   }
@@ -263,24 +153,44 @@ class SyncService {
   /**
    * Sync category to server
    */
-  private async syncCategory(operation: SyncOperation, data: any): Promise<void> {
+  private async syncCategory(operation: SyncOperation, data: any, documentId: string): Promise<void> {
+    const db = await getDatabase();
+
+    let serverId = data.serverId || data.id;
+
+    if (operation !== 'create') {
+      const localCategory = await db.select().from(categories).where(eq(categories.id, documentId)).limit(1);
+      if (localCategory.length > 0 && localCategory[0].serverId) {
+        serverId = localCategory[0].serverId;
+      }
+    }
+
     switch (operation) {
       case 'create':
-        await this.makeRequest('/api/products/categories', {
-          method: 'POST',
-          body: JSON.stringify(data),
-        });
+        const createResponse = await apiService.post('/api/products/categories', data) as any;
+
+        // Update local category with serverId
+        if (createResponse && (createResponse.id || createResponse._id)) {
+          const newServerId = createResponse.id || createResponse._id;
+          await db.update(categories)
+            .set({
+              serverId: newServerId,
+              syncStatus: 'synced',
+              lastSyncedAt: Date.now()
+            })
+            .where(eq(categories.id, documentId));
+        }
         break;
       case 'update':
-        await this.makeRequest(`/api/products/categories/${data.serverId || data.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(data),
-        });
+        if (!serverId) throw new Error('Cannot update category: Missing serverId');
+        await apiService.put(`/api/products/categories/${serverId}`, data);
         break;
       case 'delete':
-        await this.makeRequest(`/api/products/categories/${data.serverId || data.id}`, {
-          method: 'DELETE',
-        });
+        if (!serverId) {
+          console.warn('[SYNC_SERVICE] Cannot delete category: Missing serverId');
+          return;
+        }
+        await apiService.delete(`/api/products/categories/${serverId}`);
         break;
     }
   }
@@ -288,24 +198,20 @@ class SyncService {
   /**
    * Sync order to server
    */
-  private async syncOrder(operation: SyncOperation, data: any): Promise<void> {
+  private async syncOrder(operation: SyncOperation, data: any, documentId: string): Promise<void> {
+    // Orders might not need serverId lookup if they are always created with one or don't sync back updates in the same way
+    // But for consistency, let's implement it if needed. 
+    // Assuming orders are mostly 'create'.
+
     switch (operation) {
       case 'create':
-        await this.makeRequest('/api/orders', {
-          method: 'POST',
-          body: JSON.stringify(data),
-        });
+        await apiService.post('/api/orders', data);
         break;
       case 'update':
-        await this.makeRequest(`/api/orders/${data.serverId || data.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(data),
-        });
+        await apiService.put(`/api/orders/${data.serverId || data.id}`, data);
         break;
       case 'delete':
-        await this.makeRequest(`/api/orders/${data.serverId || data.id}`, {
-          method: 'DELETE',
-        });
+        await apiService.delete(`/api/orders/${data.serverId || data.id}`);
         break;
     }
   }
@@ -320,25 +226,25 @@ class SyncService {
       console.log('[SYNC_SERVICE] Fetching products from server...');
       // Pull products
       // Backend returns: { success: true, data: { products: [...], pagination: {...} } }
-      const productsResponse = await this.makeRequest('/api/products') as ApiResponse<any>;
+      const productsResponse = await apiService.get<ApiResponse<any>>('/api/products');
       console.log('[SYNC_SERVICE] Products response:', {
         success: productsResponse.success,
         hasData: !!productsResponse.data,
         dataType: typeof productsResponse.data,
         isArray: Array.isArray(productsResponse.data),
-        productsCount: Array.isArray(productsResponse.data) 
-          ? productsResponse.data.length 
+        productsCount: Array.isArray(productsResponse.data)
+          ? productsResponse.data.length
           : productsResponse.data?.products?.length || 0
       });
-      
+
       if (productsResponse.success && productsResponse.data) {
         // Handle both response formats:
         // 1. { data: { products: [...], pagination: {...} } } - from GET /api/products
         // 2. { data: [...] } - direct array (for backward compatibility)
-        const productsArray = Array.isArray(productsResponse.data) 
-          ? productsResponse.data 
+        const productsArray = Array.isArray(productsResponse.data)
+          ? productsResponse.data
           : productsResponse.data.products || [];
-        
+
         console.log('[SYNC_SERVICE] Processing products:', productsArray.length);
         if (productsArray.length > 0) {
           try {
@@ -373,7 +279,7 @@ class SyncService {
       console.log('[SYNC_SERVICE] About to call makeRequest for /api/products/categories');
       let categoriesResponse: ApiResponse<any>;
       try {
-        categoriesResponse = await this.makeRequest('/api/products/categories') as ApiResponse<any>;
+        categoriesResponse = await apiService.get<ApiResponse<any>>('/api/products/categories');
         console.log('[SYNC_SERVICE] Categories request completed successfully');
       } catch (requestError) {
         console.error('[SYNC_SERVICE] Categories request failed in try block:', {
@@ -393,13 +299,13 @@ class SyncService {
         responseKeys: categoriesResponse.data ? Object.keys(categoriesResponse.data) : [],
         fullResponse: JSON.stringify(categoriesResponse).substring(0, 500)
       });
-      
+
       if (categoriesResponse.success && categoriesResponse.data) {
         // Handle both response formats
         const categoriesArray = Array.isArray(categoriesResponse.data)
           ? categoriesResponse.data
           : categoriesResponse.data.categories || [];
-        
+
         console.log('[SYNC_SERVICE] Processing categories:', categoriesArray.length);
         if (categoriesArray.length > 0) {
           console.log('[SYNC_SERVICE] Sample category:', JSON.stringify(categoriesArray[0]).substring(0, 200));
@@ -433,7 +339,7 @@ class SyncService {
         errorName: error instanceof Error ? error.name : typeof error,
         errorType: typeof error,
       };
-      
+
       if (error instanceof Error) {
         errorInfo.errorStack = error.stack?.substring(0, 1000);
         // Try to get more details from the error object
@@ -441,17 +347,17 @@ class SyncService {
           errorInfo.errorCause = error.cause;
         }
       }
-      
+
       // Try to stringify the error object
       try {
         errorInfo.errorStringified = JSON.stringify(error, Object.getOwnPropertyNames(error));
       } catch {
         errorInfo.errorStringified = '[Unable to stringify]';
       }
-      
+
       console.error('[SYNC_SERVICE] Error pulling from server:', errorInfo);
       console.error('[SYNC_SERVICE] Raw error object:', error);
-      
+
       // Don't throw - allow sync to continue even if pull fails
     }
   }
@@ -461,7 +367,7 @@ class SyncService {
    */
   private async updateLocalProducts(serverProducts: any[]): Promise<void> {
     const db = await getDatabase();
-    
+
     for (const serverProduct of serverProducts) {
       try {
         // Extract and convert categoryId (handle populated format and ObjectId format)
@@ -496,7 +402,7 @@ class SyncService {
         } else if (serverProduct.category_id) {
           categoryId = String(serverProduct.category_id);
         }
-        
+
         // Skip products without valid categoryId (required field)
         if (!categoryId || categoryId.trim() === '' || categoryId === 'null' || categoryId === 'undefined') {
           console.warn('[SYNC_SERVICE] Skipping product without valid categoryId:', {
@@ -521,10 +427,10 @@ class SyncService {
         }
 
         // Check if product exists locally by server_id
-        const existingProducts = serverId 
+        const existingProducts = serverId
           ? await db.select().from(products)
-              .where(eq(products.serverId, serverId))
-              .limit(1)
+            .where(eq(products.serverId, serverId))
+            .limit(1)
           : [];
 
         // Validate required fields before creating productData
@@ -609,10 +515,10 @@ class SyncService {
    */
   private async updateLocalCategories(serverCategories: any[]): Promise<void> {
     const db = await getDatabase();
-    
+
     let successCount = 0;
     let errorCount = 0;
-    
+
     for (const serverCategory of serverCategories) {
       try {
         // Validate required fields
@@ -648,7 +554,7 @@ class SyncService {
 
         const now = Date.now();
         const categoryName = String(serverCategory.name || '').trim();
-        
+
         // Ensure name is not empty after trimming
         if (!categoryName) {
           console.warn('[SYNC_SERVICE] Skipping category with empty name after trim');
@@ -698,7 +604,7 @@ class SyncService {
         // Continue processing other categories instead of throwing
       }
     }
-    
+
     console.log('[SYNC_SERVICE] Category sync summary:', {
       total: serverCategories.length,
       success: successCount,
@@ -732,15 +638,15 @@ class SyncService {
     lastSyncTime: number | null;
   }> {
     const pendingItems = await dbHelpers.getPendingSyncItems();
-    
+
     const db = await getDatabase();
     const failedItems = await db.select().from(syncQueue)
       .where(eq(syncQueue.status, 'failed'));
-    
+
     const completedItems = await db.select().from(syncQueue)
       .where(eq(syncQueue.status, 'completed'));
 
-    const lastSyncTime = completedItems.length > 0 
+    const lastSyncTime = completedItems.length > 0
       ? Math.max(...completedItems.map(item => item.timestamp.getTime()))
       : null;
 
@@ -752,4 +658,4 @@ class SyncService {
   }
 }
 
-export default SyncService;
+export default new SyncService();

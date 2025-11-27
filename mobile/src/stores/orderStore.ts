@@ -1,9 +1,9 @@
 import { create } from "zustand";
 import * as dbHelpers from "../database/db-helpers";
 import { Order } from "../database/types";
-import SyncService from "../services/syncService";
+import syncService from '../services/syncService';
 import { CartItem } from "./cartStore";
-import { API_CONFIG } from "../config/api";
+// Sync service is imported as singleton
 
 export interface OrderFilters {
   status?: string;
@@ -32,9 +32,6 @@ export interface OrderState {
   setFilters: (filters: OrderFilters) => void;
   clearError: () => void;
 }
-
-// Create sync service instance
-const syncService = new SyncService(API_CONFIG.BASE_URL);
 
 export const useOrderStore = create<OrderState>((set, get) => ({
   orders: [],

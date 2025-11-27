@@ -2,17 +2,11 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiService from '../services/apiService';
-import SyncService from '../services/syncService';
-import { config } from '../config';
+
+
 import { decodeJWT, extractStoreIdFromToken } from '../utils/jwtDecoder';
 
-// Create sync service instance with error handling
-let syncService: SyncService | null = null;
-try {
-  syncService = new SyncService(config.apiUrl);
-} catch (error) {
-  console.warn('Failed to initialize sync service:', error);
-}
+// Sync service is imported as singleton
 
 export interface User {
   userId: string;
@@ -55,7 +49,7 @@ export const useAuthStore = create<AuthState>()(
         });
 
         set({ isLoading: true, error: null });
-        
+
         try {
           console.log('[AUTH_STORE] Calling apiService.login');
           const response = await apiService.login(email, password, rememberMe);
@@ -64,10 +58,10 @@ export const useAuthStore = create<AuthState>()(
             hasData: !!response.data,
             message: response.message
           });
-          
+
           if (response.success) {
             const { user, tokens } = response.data;
-            
+
             console.log('[AUTH_STORE] Login successful, parsing response', {
               hasTokens: !!tokens,
               hasAccessToken: !!tokens?.accessToken,
@@ -77,17 +71,17 @@ export const useAuthStore = create<AuthState>()(
               userEmail: user?.email,
               userFullName: user?.fullName
             });
-            
+
             // Extract access token from tokens object
             const accessToken = tokens?.accessToken;
             if (accessToken) {
               apiService.setAuthToken(accessToken);
-              syncService?.setAuthToken(accessToken);
+
               console.log('[AUTH_STORE] Access token set successfully');
             } else {
               console.warn('[AUTH_STORE] No access token found in tokens object');
             }
-            
+
             // Extract storeId from JWT token (source of truth from backend)
             // This ensures we use the exact storeId that the backend will use
             let storeId = '';
@@ -142,13 +136,13 @@ export const useAuthStore = create<AuthState>()(
                 }
               }
             }
-            
+
             // Validate storeId is a valid MongoDB ObjectId format (24 hex characters)
             if (storeId && !/^[0-9a-fA-F]{24}$/.test(storeId)) {
               console.warn('[AUTH_STORE] Invalid storeId format:', storeId, 'Original:', user.storeId);
               storeId = '';
             }
-            
+
             // If storeId is still empty, decode full token for debugging
             if (!storeId && accessToken) {
               const decoded = decodeJWT(accessToken);
@@ -159,19 +153,19 @@ export const useAuthStore = create<AuthState>()(
                 userId: decoded?.userId,
                 email: decoded?.email
               });
-              
+
               // If token has invalid storeId, warn user they need to re-login
               if (decoded?.storeId && !/^[0-9a-fA-F]{24}$/.test(decoded.storeId)) {
                 console.error('[AUTH_STORE] Token contains invalid storeId format. User should log out and log back in to get a new token.');
               }
             }
-            
+
             // Validate we have a valid storeId before proceeding
             if (!storeId || !/^[0-9a-fA-F]{24}$/.test(storeId)) {
               console.error('[AUTH_STORE] Cannot proceed without valid storeId. Token may be outdated. User should log out and log back in.');
               // Still create user object but with empty storeId - backend will handle validation
             }
-            
+
             const mappedUser: User = {
               userId: user.id,
               email: user.email,
@@ -180,7 +174,7 @@ export const useAuthStore = create<AuthState>()(
               storeId: storeId || '', // Use empty string if invalid
               permissions: user.permissions || []
             };
-            
+
             console.log('[AUTH_STORE] User mapped:', {
               userId: mappedUser.userId,
               email: mappedUser.email,
@@ -190,7 +184,7 @@ export const useAuthStore = create<AuthState>()(
               isValidStoreId: mappedUser.storeId ? /^[0-9a-fA-F]{24}$/.test(mappedUser.storeId) : false,
               storeIdSource: accessToken && extractStoreIdFromToken(accessToken) ? 'JWT_TOKEN' : 'API_RESPONSE'
             });
-            
+
             set({
               user: mappedUser,
               isAuthenticated: true,
@@ -219,7 +213,7 @@ export const useAuthStore = create<AuthState>()(
           if (error instanceof Error) {
             errorInfo.errorName = error.name;
             errorInfo.errorStack = error.stack?.substring(0, 1000); // First 1000 chars
-            
+
             // Extract all enumerable properties
             const errorProps: any = {};
             for (const key in error) {
@@ -236,7 +230,7 @@ export const useAuthStore = create<AuthState>()(
 
           console.error('[AUTH_STORE] Login exception:', JSON.stringify(errorInfo, null, 2));
           console.error('[AUTH_STORE] Raw error:', error);
-          
+
           // Try to get more specific error message
           let errorMessage = 'Login failed';
           if (error instanceof Error) {
@@ -246,7 +240,7 @@ export const useAuthStore = create<AuthState>()(
               errorMessage = error.message;
             }
           }
-          
+
           set({
             error: errorMessage,
             isLoading: false,
@@ -256,7 +250,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         set({ isLoading: true });
-        
+
         try {
           await apiService.logout();
         } catch (error) {
@@ -264,8 +258,8 @@ export const useAuthStore = create<AuthState>()(
         } finally {
           // Clear auth token
           apiService.setAuthToken('');
-          syncService?.setAuthToken('');
-          
+
+
           set({
             user: null,
             isAuthenticated: false,
@@ -284,14 +278,14 @@ export const useAuthStore = create<AuthState>()(
             success: response.success,
             hasAccessToken: !!response.data?.accessToken
           });
-          
+
           if (response.success) {
             const { accessToken } = response.data;
-            
+
             if (accessToken) {
               // Update auth token
               apiService.setAuthToken(accessToken);
-              syncService?.setAuthToken(accessToken);
+
               console.log('[AUTH_STORE] Token refreshed successfully');
             } else {
               console.warn('[AUTH_STORE] No access token in refresh response');
@@ -328,7 +322,7 @@ export const useAuthStore = create<AuthState>()(
         if (state) {
           state.isHydrated = true;
         }
-        
+
         // Restore token when store is rehydrated
         if (state?.isAuthenticated && state?.user) {
           console.log('[AUTH_STORE] Store rehydrated, restoring token');
@@ -350,15 +344,15 @@ apiService.setSessionExpiredCallback(() => {
 export const initializeAuth = async () => {
   console.log('[AUTH_STORE] Initializing auth state...');
   await apiService.restoreToken();
-  
+
   // If we have a user in state but no token in secure storage (and restoreToken didn't find one),
   // we should probably logout to be safe, OR trust the state if we support offline without token (unlikely for API calls).
   // But for now, let's assume if we are authenticated, we expect a token.
-  
+
   // Note: restoreToken sets the token in apiService if found.
   // We can't easily check apiService.authToken here without exposing a getter, 
   // but apiService handles the token internally.
-  
+
   // If we want to verify the session on launch:
   const state = useAuthStore.getState();
   if (state.isAuthenticated) {
