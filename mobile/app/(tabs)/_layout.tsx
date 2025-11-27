@@ -1,11 +1,12 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { HapticTab } from '../../components/haptic-tab';
 import { Colors } from '../../constants/theme';
 import { useColorScheme } from '../../hooks/use-color-scheme';
+import TabBarSyncBadge from '../../src/components/TabBarSyncBadge';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -67,7 +68,10 @@ export default function TabLayout() {
         options={{
           title: 'More',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons size={24} name={focused ? "ellipsis-horizontal" : "ellipsis-horizontal-outline"} color={color} />
+            <View style={{ position: 'relative' }}>
+              <Ionicons size={24} name={focused ? "ellipsis-horizontal" : "ellipsis-horizontal-outline"} color={color} />
+              <TabBarSyncBadge color={color} />
+            </View>
           ),
         }}
       />

@@ -15,7 +15,7 @@ interface SyncStatusIndicatorProps {
 }
 
 export default function SyncStatusIndicator({ onPress }: SyncStatusIndicatorProps) {
-  const { syncStatus, pendingCount, lastSyncTime, syncNow } = useSyncStore();
+  const { syncStatus, pendingCount, lastSyncTime, syncAll } = useSyncStore();
   const [pulseAnim] = useState(new Animated.Value(1));
 
   useEffect(() => {
@@ -112,7 +112,7 @@ export default function SyncStatusIndicator({ onPress }: SyncStatusIndicatorProp
         `Status: ${getStatusText()}\nPending: ${pendingCount} items\nLast sync: ${formatLastSync()}`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Sync Now', onPress: syncNow }
+          { text: 'Sync Now', onPress: syncAll }
         ]
       );
     }

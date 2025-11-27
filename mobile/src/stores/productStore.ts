@@ -236,18 +236,9 @@ export const useProductStore = create<ProductState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      // Token is handled by ApiService
-      const result = await syncService.syncAll();
-
-      if (result.success) {
-        // Reload products after sync
-        await get().loadProducts(get().filters);
-        await get().loadCategories();
-      } else {
-        set({
-          error: `Sync failed: ${result.errors.join(', ')}`,
-        });
-      }
+      // Use the centralized sync store which will update UI state
+      const { syncAll } = await import('./syncStore').then(m => m.useSyncStore.getState());
+      await syncAll();
 
       set({ isLoading: false });
     } catch (error) {
