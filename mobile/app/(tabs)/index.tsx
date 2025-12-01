@@ -97,14 +97,13 @@ export default function HomeScreen() {
 
   const lowStockProducts = products.filter(p => p.isLowStock);
 
+  // If not authenticated, AuthGuard will handle the redirect
+  // Just show loading indicator during the brief redirect
   if (!isAuthenticated) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.centerContainer}>
-          <Ionicons name="lock-closed-outline" size={64} color={theme.gray400} />
-          <Text style={[styles.errorText, { color: theme.gray600 }]}>
-            Please log in to view dashboard
-          </Text>
+          <ActivityIndicator size="large" color={theme.primary} />
         </View>
       </View>
     );

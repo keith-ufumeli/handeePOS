@@ -424,10 +424,14 @@ export default function SalesScreen() {
     </Modal>
   );
 
+  // If not authenticated, AuthGuard will handle the redirect
+  // Just show loading indicator during the brief redirect
   if (!isAuthenticated) {
     return (
-      <View style={[styles.centerContainer, { backgroundColor: theme.background }]}>
-        <Text style={[styles.errorText, { color: theme.gray500 }]}>Please log in to access sales</Text>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
       </View>
     );
   }

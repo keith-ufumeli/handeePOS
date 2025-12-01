@@ -2,6 +2,7 @@ import { Redirect } from 'expo-router';
 import { useEffect } from 'react';
 import { useAuthStore } from '../src/stores/authStore';
 import { View, ActivityIndicator } from 'react-native';
+import WelcomeScreen from '../src/components/WelcomeScreen';
 
 export default function Index() {
   const { isAuthenticated, isLoading, isHydrated } = useAuthStore();
@@ -19,6 +20,11 @@ export default function Index() {
     );
   }
 
-  // Redirect based on authentication state
-  return <Redirect href={isAuthenticated ? '/(tabs)' : '/(auth)/login'} />;
+  // If authenticated, redirect to main app
+  if (isAuthenticated) {
+    return <Redirect href="/(tabs)" />;
+  }
+
+  // If not authenticated, show welcome screen with connection status
+  return <WelcomeScreen />;
 }
