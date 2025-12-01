@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { IUser } from '@/models/User';
@@ -20,10 +20,12 @@ export interface AuthTokens {
 class AuthService {
   private readonly JWT_SECRET = process.env['JWT_SECRET'] || 'your-secret-key';
   private readonly JWT_REFRESH_SECRET = process.env['JWT_REFRESH_SECRET'] || 'your-refresh-secret-key';
-  private readonly ACCESS_TOKEN_EXPIRES_IN = '15m';
-  private readonly ACCESS_TOKEN_EXPIRES_IN_REMEMBERED = '1d';
-  private readonly REFRESH_TOKEN_EXPIRES_IN = '7d';
-  private readonly REFRESH_TOKEN_EXPIRES_IN_REMEMBERED = '30d';
+  private readonly JWT_DEVICE_SECRET = process.env['JWT_DEVICE_SECRET'];
+  private readonly ACCESS_TOKEN_EXPIRES_IN = process.env['JWT_EXPIRES_IN'] || '1h';
+  private readonly ACCESS_TOKEN_EXPIRES_IN_REMEMBERED = process.env['JWT_EXPIRES_IN_REMEMBERED'] || '7d';
+  private readonly REFRESH_TOKEN_EXPIRES_IN = process.env['JWT_REFRESH_EXPIRES_IN'] || '30d';
+  private readonly REFRESH_TOKEN_EXPIRES_IN_REMEMBERED = process.env['JWT_REFRESH_EXPIRES_IN_REMEMBERED'] || '90d';
+  private readonly DEVICE_TOKEN_EXPIRES_IN = process.env['JWT_DEVICE_EXPIRES_IN'] || '120d';
 
   /**
    * Hash password using bcrypt
@@ -52,22 +54,24 @@ class AuthService {
    * Generate access token
    */
   generateAccessToken(payload: TokenPayload, rememberMe: boolean = false): string {
+    const expiresIn = rememberMe ? this.ACCESS_TOKEN_EXPIRES_IN_REMEMBERED : this.ACCESS_TOKEN_EXPIRES_IN;
     return jwt.sign(payload, this.JWT_SECRET, {
-      expiresIn: rememberMe ? this.ACCESS_TOKEN_EXPIRES_IN_REMEMBERED : this.ACCESS_TOKEN_EXPIRES_IN,
+      expiresIn,
       issuer: 'handeepos-api',
       audience: 'handeepos-mobile'
-    });
+    } as SignOptions);
   }
 
   /**
    * Generate refresh token
    */
   generateRefreshToken(payload: TokenPayload, rememberMe: boolean = false): string {
+    const expiresIn = rememberMe ? this.REFRESH_TOKEN_EXPIRES_IN_REMEMBERED : this.REFRESH_TOKEN_EXPIRES_IN;
     return jwt.sign(payload, this.JWT_REFRESH_SECRET, {
-      expiresIn: rememberMe ? this.REFRESH_TOKEN_EXPIRES_IN_REMEMBERED : this.REFRESH_TOKEN_EXPIRES_IN,
+      expiresIn,
       issuer: 'handeepos-api',
       audience: 'handeepos-mobile'
-    });
+    } as SignOptions);
   }
 
   /**
@@ -176,6 +180,48 @@ class AuthService {
         tokenLength: token.length
       });
       throw new Error('Invalid refresh token');
+    }
+  }
+
+  /**
+   * Generate device token
+   */
+  generateDeviceToken(payload: TokenPayload): string {
+    if (!this.JWT_DEVICE_SECRET) {
+      throw new Error('JWT_DEVICE_SECRET is not configured');
+    }
+    logger.info('[AUTH_SERVICE] Generating device token', {
+      userId: payload.userId,
+      email: payload.email
+    });
+    return jwt.sign(payload, this.JWT_DEVICE_SECRET, {
+      expiresIn: this.DEVICE_TOKEN_EXPIRES_IN,
+      issuer: 'handeepos-api',
+      audience: 'handeepos-mobile'
+    } as SignOptions);
+  }
+
+  /**
+   * Verify device token
+   */
+  verifyDeviceToken(token: string): TokenPayload {
+    if (!this.JWT_DEVICE_SECRET) {
+      throw new Error('JWT_DEVICE_SECRET is not configured');
+    }
+    logger.info('[AUTH_SERVICE] Verifying device token');
+    try {
+      const decoded = jwt.verify(token, this.JWT_DEVICE_SECRET) as TokenPayload;
+      logger.info('[AUTH_SERVICE] Device token verified successfully', {
+        userId: decoded.userId,
+        email: decoded.email
+      });
+      return decoded;
+    } catch (error) {
+      logger.error('[AUTH_SERVICE] Device token verification failed:', {
+        error: error instanceof Error ? error.message : String(error),
+        tokenLength: token.length
+      });
+      throw new Error('Invalid device token');
     }
   }
 
