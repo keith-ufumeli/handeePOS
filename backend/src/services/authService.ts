@@ -2,7 +2,9 @@ import jwt, { SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { IUser } from '@/models/User';
+import RefreshToken, { IRefreshToken } from '@/models/RefreshToken';
 import logger from '@/utils/logger';
+import mongoose from 'mongoose';
 
 export interface TokenPayload {
   userId: string;
@@ -21,11 +23,13 @@ class AuthService {
   private readonly JWT_SECRET = process.env['JWT_SECRET'] || 'your-secret-key';
   private readonly JWT_REFRESH_SECRET = process.env['JWT_REFRESH_SECRET'] || 'your-refresh-secret-key';
   private readonly JWT_DEVICE_SECRET = process.env['JWT_DEVICE_SECRET'];
-  private readonly ACCESS_TOKEN_EXPIRES_IN = process.env['JWT_EXPIRES_IN'] || '1h';
+  // Extended token lifetimes for POS offline-first operations
+  private readonly ACCESS_TOKEN_EXPIRES_IN = process.env['JWT_EXPIRES_IN'] || '24h'; // Extended from 1h for offline use
   private readonly ACCESS_TOKEN_EXPIRES_IN_REMEMBERED = process.env['JWT_EXPIRES_IN_REMEMBERED'] || '7d';
-  private readonly REFRESH_TOKEN_EXPIRES_IN = process.env['JWT_REFRESH_EXPIRES_IN'] || '30d';
-  private readonly REFRESH_TOKEN_EXPIRES_IN_REMEMBERED = process.env['JWT_REFRESH_EXPIRES_IN_REMEMBERED'] || '90d';
-  private readonly DEVICE_TOKEN_EXPIRES_IN = process.env['JWT_DEVICE_EXPIRES_IN'] || '120d';
+  private readonly REFRESH_TOKEN_EXPIRES_IN = process.env['JWT_REFRESH_EXPIRES_IN'] || '90d'; // Extended from 30d
+  private readonly REFRESH_TOKEN_EXPIRES_IN_REMEMBERED = process.env['JWT_REFRESH_EXPIRES_IN_REMEMBERED'] || '180d'; // Extended from 90d
+  private readonly DEVICE_TOKEN_EXPIRES_IN = process.env['JWT_DEVICE_EXPIRES_IN'] || '365d'; // Extended from 120d for trusted devices
+  private readonly OFFLINE_GRACE_PERIOD_DAYS = 7; // Allow 7 days offline before requiring re-auth
 
   /**
    * Hash password using bcrypt
@@ -282,6 +286,203 @@ class AuthService {
     // For now, just log the reset link
     const resetLink = `${process.env['FRONTEND_URL']}/reset-password?token=${token}`;
     logger.info(`Password reset link for ${email}: ${resetLink}`);
+  }
+
+  /**
+   * Store refresh token in database
+   */
+  async storeRefreshToken(
+    token: string,
+    userId: mongoose.Types.ObjectId,
+    expiresIn: string,
+    deviceInfo?: {
+      deviceId?: string;
+      deviceName?: string;
+      platform?: string;
+      appVersion?: string;
+    },
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<IRefreshToken> {
+    // Parse expiration time
+    const expiresAt = this.parseExpirationTime(expiresIn);
+
+    const refreshToken = await RefreshToken.create({
+      token,
+      userId,
+      deviceInfo,
+      expiresAt,
+      ipAddress,
+      userAgent,
+    });
+
+    logger.info('[AUTH_SERVICE] Refresh token stored', {
+      tokenId: refreshToken._id,
+      userId,
+      expiresAt,
+    });
+
+    return refreshToken;
+  }
+
+  /**
+   * Validate and rotate refresh token
+   * Returns new tokens if valid, throws error if invalid/revoked
+   */
+  async validateAndRotateRefreshToken(
+    token: string,
+    deviceInfo?: {
+      deviceId?: string;
+      deviceName?: string;
+      platform?: string;
+      appVersion?: string;
+    },
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<{ accessToken: string; refreshToken: string; isRemembered: boolean }> {
+    logger.info('[AUTH_SERVICE] Validating and rotating refresh token');
+
+    // Verify JWT signature and expiration
+    const payload = this.verifyRefreshToken(token);
+
+    // Check if token exists in database and is valid
+    const storedToken = await RefreshToken.findOne({ token, isRevoked: false });
+
+    if (!storedToken) {
+      logger.warn('[AUTH_SERVICE] Refresh token not found or revoked', { userId: payload.userId });
+      throw new Error('Invalid or revoked refresh token');
+    }
+
+    if (!storedToken.isValid()) {
+      logger.warn('[AUTH_SERVICE] Refresh token expired', {
+        tokenId: storedToken._id,
+        expiresAt: storedToken.expiresAt,
+      });
+      throw new Error('Refresh token expired');
+    }
+
+    // Update last used time
+    storedToken.lastUsedAt = new Date();
+    await storedToken.save();
+
+    // Determine if this was a "remember me" token based on expiration
+    const daysUntilExpiry = Math.floor(
+      (storedToken.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    );
+    const isRemembered = daysUntilExpiry > 60; // If more than 60 days, consider it "remembered"
+
+    // Generate new tokens
+    const newRefreshToken = this.generateRefreshToken(payload, isRemembered);
+    const newAccessToken = this.generateAccessToken(payload, isRemembered);
+
+    // Store new refresh token
+    const expiresIn = isRemembered
+      ? this.REFRESH_TOKEN_EXPIRES_IN_REMEMBERED
+      : this.REFRESH_TOKEN_EXPIRES_IN;
+    await this.storeRefreshToken(
+      newRefreshToken,
+      new mongoose.Types.ObjectId(payload.userId),
+      expiresIn,
+      deviceInfo,
+      ipAddress,
+      userAgent
+    );
+
+    // Revoke old token (rotation)
+    await storedToken.revoke('Token rotated', newRefreshToken);
+
+    logger.info('[AUTH_SERVICE] Refresh token rotated successfully', {
+      userId: payload.userId,
+      oldTokenId: storedToken._id,
+    });
+
+    return {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+      isRemembered,
+    };
+  }
+
+  /**
+   * Revoke refresh token
+   */
+  async revokeRefreshToken(token: string, reason: string = 'User logout'): Promise<void> {
+    const storedToken = await RefreshToken.findOne({ token });
+    if (storedToken && !storedToken.isRevoked) {
+      await storedToken.revoke(reason);
+      logger.info('[AUTH_SERVICE] Refresh token revoked', {
+        tokenId: storedToken._id,
+        reason,
+      });
+    }
+  }
+
+  /**
+   * Revoke all refresh tokens for a user
+   */
+  async revokeAllRefreshTokensForUser(
+    userId: mongoose.Types.ObjectId,
+    reason: string = 'User logout from all devices'
+  ): Promise<number> {
+    const count = await RefreshToken.revokeAllForUser(userId, reason);
+    logger.info('[AUTH_SERVICE] All refresh tokens revoked for user', {
+      userId,
+      count,
+      reason,
+    });
+    return count;
+  }
+
+  /**
+   * Clean up expired refresh tokens
+   */
+  async cleanupExpiredTokens(): Promise<number> {
+    const count = await RefreshToken.cleanupExpiredTokens();
+    logger.info('[AUTH_SERVICE] Expired refresh tokens cleaned up', { count });
+    return count;
+  }
+
+  /**
+   * Parse expiration time string to Date
+   */
+  private parseExpirationTime(expiresIn: string): Date {
+    const match = expiresIn.match(/^(\d+)([smhd])$/);
+    if (!match) {
+      throw new Error('Invalid expiration format');
+    }
+
+    const value = parseInt(match[1] || '0', 10);
+    const unit = match[2];
+
+    const now = Date.now();
+    let milliseconds = 0;
+
+    switch (unit) {
+      case 's':
+        milliseconds = value * 1000;
+        break;
+      case 'm':
+        milliseconds = value * 60 * 1000;
+        break;
+      case 'h':
+        milliseconds = value * 60 * 60 * 1000;
+        break;
+      case 'd':
+        milliseconds = value * 24 * 60 * 60 * 1000;
+        break;
+    }
+
+    return new Date(now + milliseconds);
+  }
+
+  /**
+   * Check if offline grace period is still valid
+   * Used for POS systems that may be offline for extended periods
+   */
+  isWithinOfflineGracePeriod(lastOnlineDate: Date): boolean {
+    const gracePeriodMs = this.OFFLINE_GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000;
+    const timeSinceLastOnline = Date.now() - lastOnlineDate.getTime();
+    return timeSinceLastOnline <= gracePeriodMs;
   }
 }
 

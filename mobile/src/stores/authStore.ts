@@ -72,12 +72,14 @@ export const useAuthStore = create<AuthState>()(
               userFullName: user?.fullName
             });
 
-            // Extract access token from tokens object
+            // Extract tokens from response
             const accessToken = tokens?.accessToken;
+            const refreshToken = tokens?.refreshToken;
             if (accessToken) {
-              apiService.setAuthToken(accessToken);
+              // Set both access and refresh tokens
+              apiService.setAuthToken(accessToken, refreshToken);
 
-              console.log('[AUTH_STORE] Access token set successfully');
+              console.log('[AUTH_STORE] Tokens set successfully');
             } else {
               console.warn('[AUTH_STORE] No access token found in tokens object');
             }
@@ -256,8 +258,8 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           console.error('Logout error:', error);
         } finally {
-          // Clear auth token
-          apiService.setAuthToken('');
+          // Clear both auth and refresh tokens
+          apiService.setAuthToken('', '');
 
 
           set({
@@ -272,23 +274,24 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: async () => {
         console.log('[AUTH_STORE] Refresh token called');
         try {
-          console.log('[AUTH_STORE] Calling apiService.refreshToken');
-          const response = await apiService.refreshToken();
+          console.log('[AUTH_STORE] Calling apiService.refreshAuthToken');
+          const response = await apiService.refreshAuthToken();
           console.log('[AUTH_STORE] Refresh token response received', {
             success: response.success,
-            hasAccessToken: !!response.data?.accessToken
+            hasAccessToken: !!response.data?.accessToken,
+            hasRefreshToken: !!response.data?.refreshToken
           });
 
           if (response.success) {
-            const { accessToken } = response.data;
+            const { accessToken, refreshToken } = response.data;
 
-            if (accessToken) {
-              // Update auth token
-              apiService.setAuthToken(accessToken);
+            if (accessToken && refreshToken) {
+              // Update both tokens (refresh token has been rotated)
+              apiService.setAuthToken(accessToken, refreshToken);
 
-              console.log('[AUTH_STORE] Token refreshed successfully');
+              console.log('[AUTH_STORE] Tokens refreshed successfully (rotated)');
             } else {
-              console.warn('[AUTH_STORE] No access token in refresh response');
+              console.warn('[AUTH_STORE] Missing tokens in refresh response');
               get().logout();
             }
           } else {
@@ -302,6 +305,14 @@ export const useAuthStore = create<AuthState>()(
             errorType: error instanceof Error ? error.constructor.name : typeof error,
             stack: error instanceof Error ? error.stack : undefined
           });
+
+          // Check if we're within offline grace period
+          if (apiService.isWithinOfflineGracePeriod()) {
+            console.log('[AUTH_STORE] Within offline grace period, allowing continued use');
+            // Don't logout - allow offline operation
+            return;
+          }
+
           get().logout();
         }
       },

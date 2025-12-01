@@ -8,6 +8,8 @@ const API_BASE_URL = __DEV__
   : 'https://your-production-api.com';
 
 const AUTH_TOKEN_KEY = config.authTokenKey;
+const REFRESH_TOKEN_KEY = 'refresh_token';
+const LAST_ONLINE_KEY = 'last_online_timestamp';
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -28,10 +30,12 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
 class ApiService {
   private baseUrl: string;
   private authToken: string | null = null;
+  private refreshToken: string | null = null;
   private tokenRestorePromise: Promise<void> | null = null;
   private isRefreshing = false;
   private refreshSubscribers: ((token: string) => void)[] = [];
   private sessionExpiredCallback: (() => void) | null = null;
+  private lastOnlineTime: Date | null = null;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
@@ -51,42 +55,82 @@ class ApiService {
     }
   }
 
-  async setAuthToken(token: string) {
+  async setAuthToken(token: string, refreshToken?: string) {
     this.authToken = token;
-    // Persist token to secure storage
+
+    // Persist access token to secure storage
     if (token) {
       try {
         await secureStorage.setItem(AUTH_TOKEN_KEY, token);
-        console.log('[API_SERVICE] Token saved to secure storage');
+        console.log('[API_SERVICE] Access token saved to secure storage');
       } catch (error) {
-        console.error('[API_SERVICE] Failed to save token to storage:', error);
+        console.error('[API_SERVICE] Failed to save access token to storage:', error);
       }
     } else {
-      // Clear token from storage
+      // Clear access token from storage
       try {
         await secureStorage.removeItem(AUTH_TOKEN_KEY);
-        console.log('[API_SERVICE] Token removed from storage');
+        console.log('[API_SERVICE] Access token removed from storage');
       } catch (error) {
-        console.error('[API_SERVICE] Failed to remove token from storage:', error);
+        console.error('[API_SERVICE] Failed to remove access token from storage:', error);
+      }
+    }
+
+    // Persist refresh token if provided
+    if (refreshToken !== undefined) {
+      this.refreshToken = refreshToken;
+      if (refreshToken) {
+        try {
+          await secureStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+          console.log('[API_SERVICE] Refresh token saved to secure storage');
+        } catch (error) {
+          console.error('[API_SERVICE] Failed to save refresh token to storage:', error);
+        }
+      } else {
+        // Clear refresh token from storage
+        try {
+          await secureStorage.removeItem(REFRESH_TOKEN_KEY);
+          console.log('[API_SERVICE] Refresh token removed from storage');
+        } catch (error) {
+          console.error('[API_SERVICE] Failed to remove refresh token from storage:', error);
+        }
       }
     }
   }
 
   async restoreToken() {
     try {
-      console.log('[API_SERVICE] Restoring token from secure storage');
+      console.log('[API_SERVICE] Restoring tokens from secure storage');
+
+      // Restore access token
       const token = await secureStorage.getItem(AUTH_TOKEN_KEY);
       if (token) {
         this.authToken = token;
-        console.log('[API_SERVICE] Token restored from storage', {
+        console.log('[API_SERVICE] Access token restored from storage', {
           tokenLength: token.length,
           tokenPrefix: token.substring(0, 20) + '...'
         });
       } else {
-        console.log('[API_SERVICE] No token found in storage');
+        console.log('[API_SERVICE] No access token found in storage');
+      }
+
+      // Restore refresh token
+      const refreshToken = await secureStorage.getItem(REFRESH_TOKEN_KEY);
+      if (refreshToken) {
+        this.refreshToken = refreshToken;
+        console.log('[API_SERVICE] Refresh token restored from storage');
+      } else {
+        console.log('[API_SERVICE] No refresh token found in storage');
+      }
+
+      // Restore last online time
+      const lastOnlineStr = await secureStorage.getItem(LAST_ONLINE_KEY);
+      if (lastOnlineStr) {
+        this.lastOnlineTime = new Date(lastOnlineStr);
+        console.log('[API_SERVICE] Last online time restored:', this.lastOnlineTime);
       }
     } catch (error) {
-      console.error('[API_SERVICE] Failed to restore token from storage:', error);
+      console.error('[API_SERVICE] Failed to restore tokens from storage:', error);
     }
   }
 
@@ -146,6 +190,16 @@ class ApiService {
         headers,
       });
 
+      // Update last online time on successful connection
+      if (response.status !== 0) { // 0 means network error
+        this.lastOnlineTime = new Date();
+        try {
+          await secureStorage.setItem(LAST_ONLINE_KEY, this.lastOnlineTime.toISOString());
+        } catch (error) {
+          console.warn('[API_SERVICE] Failed to save last online time:', error);
+        }
+      }
+
       // Handle 401 Unauthorized (Token Expired)
       if (response.status === 401 && !isAuthEndpoint && !isRetry) {
         console.log('[API_SERVICE] 401 Unauthorized received. Attempting refresh...');
@@ -172,28 +226,31 @@ class ApiService {
             throw new Error('Offline: Cannot refresh token');
           }
 
-          // Call refresh token endpoint
-          const refreshResponse = await this.refreshToken();
-          
+          // Call refresh token endpoint (with stored refresh token)
+          const refreshResponse = await this.refreshTokenRequest();
+
           if (refreshResponse.success && refreshResponse.data?.accessToken) {
-            const newToken = refreshResponse.data.accessToken;
-            await this.setAuthToken(newToken);
+            const newAccessToken = refreshResponse.data.accessToken;
+            const newRefreshToken = refreshResponse.data.refreshToken; // Rotated refresh token
+
+            // Update both tokens (rotation)
+            await this.setAuthToken(newAccessToken, newRefreshToken);
             this.isRefreshing = false;
-            this.onRefreshed(newToken);
-            
+            this.onRefreshed(newAccessToken);
+
             // Retry original request
             return this.makeRequest<T>(endpoint, options, true);
           } else {
             console.error('[API_SERVICE] Token refresh failed');
             this.isRefreshing = false;
-            await this.setAuthToken(''); // Clear token
+            await this.setAuthToken('', ''); // Clear both tokens
             this.sessionExpiredCallback?.();
             throw new Error('Session expired. Please login again.');
           }
         } catch (refreshError) {
           this.isRefreshing = false;
           console.error('[API_SERVICE] Error during token refresh:', refreshError);
-          await this.setAuthToken(''); // Clear token
+          await this.setAuthToken('', ''); // Clear both tokens
           this.sessionExpiredCallback?.();
           throw refreshError;
         }
@@ -277,6 +334,14 @@ class ApiService {
         body: JSON.stringify(requestBody),
       });
 
+      // Store both tokens after successful login
+      if (response.success && response.data?.tokens) {
+        await this.setAuthToken(
+          response.data.tokens.accessToken,
+          response.data.tokens.refreshToken
+        );
+      }
+
       return response;
     } catch (error) {
       console.error('[API_SERVICE] Login request failed:', error);
@@ -300,31 +365,90 @@ class ApiService {
 
   async logout() {
     try {
+      // Send refresh token to backend for revocation
       return await this.makeRequest('/api/auth/logout', {
         method: 'POST',
+        body: JSON.stringify({
+          refreshToken: this.refreshToken,
+          logoutAllDevices: false,
+        }),
       });
     } finally {
-      await this.setAuthToken('');
+      await this.setAuthToken('', ''); // Clear both tokens
     }
   }
 
-  async refreshToken() {
-    // Note: This calls the refresh endpoint. The actual token update happens in makeRequest or caller.
-    // But since we use makeRequest here, and makeRequest checks for 401, we need to be careful.
-    // The refresh endpoint itself might return 401 if refresh token is expired.
-    // So we should probably use a raw fetch here to avoid circular dependency in makeRequest logic,
-    // OR ensure makeRequest doesn't try to refresh if the endpoint IS refresh-token.
-    // I added !isAuthEndpoint check in makeRequest, but refresh-token IS an auth endpoint.
-    // So makeRequest won't try to refresh if this call fails with 401. Correct.
-    
-    // However, we need to pass the refresh token. 
-    // Usually refresh token is in HttpOnly cookie. If so, fetch automatically sends it.
-    // If it's in body/header, we need to send it.
-    // Assuming cookie based on previous code not sending it explicitly.
-    
-    return this.makeRequest('/api/auth/refresh-token', {
-      method: 'POST',
-    });
+  /**
+   * Internal refresh token request (used by makeRequest)
+   * Uses raw fetch to avoid circular dependency
+   */
+  private async refreshTokenRequest(): Promise<ApiResponse> {
+    if (!this.refreshToken) {
+      throw new Error('No refresh token available');
+    }
+
+    const url = `${this.baseUrl}/api/auth/refresh-token`;
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+
+    console.log('[API_SERVICE] Calling refresh token endpoint');
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ refreshToken: this.refreshToken }),
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json().catch(() => ({}))) as { message?: string };
+        throw new Error(errorData?.message || 'Token refresh failed');
+      }
+
+      const data = (await response.json()) as ApiResponse;
+      return data;
+    } catch (error) {
+      console.error('[API_SERVICE] Refresh token request failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Public refresh token method (can be called manually)
+   */
+  async refreshAuthToken() {
+    try {
+      const response = await this.refreshTokenRequest();
+
+      if (response.success && response.data?.accessToken) {
+        const newAccessToken = response.data.accessToken;
+        const newRefreshToken = response.data.refreshToken;
+
+        // Update both tokens
+        await this.setAuthToken(newAccessToken, newRefreshToken);
+      }
+
+      return response;
+    } catch (error) {
+      console.error('[API_SERVICE] Manual token refresh failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if we're within offline grace period
+   */
+  isWithinOfflineGracePeriod(): boolean {
+    if (!this.lastOnlineTime) {
+      return false; // No last online time recorded
+    }
+
+    const GRACE_PERIOD_DAYS = 7;
+    const gracePeriodMs = GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000;
+    const timeSinceLastOnline = Date.now() - this.lastOnlineTime.getTime();
+
+    return timeSinceLastOnline <= gracePeriodMs;
   }
 
   async getMe() {

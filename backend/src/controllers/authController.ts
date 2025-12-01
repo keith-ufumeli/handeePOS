@@ -3,6 +3,7 @@ import User from '@/models/User';
 import authService from '@/services/authService';
 import logger from '@/utils/logger';
 import { validationResult } from 'express-validator';
+import mongoose from 'mongoose';
 
 export class AuthController {
   /**
@@ -134,11 +135,34 @@ export class AuthController {
 
       // Generate tokens with remember me option
       const tokens = authService.generateTokens(user, rememberMe);
-      logger.info('[AUTH] Tokens generated successfully', { 
+      logger.info('[AUTH] Tokens generated successfully', {
         userId: user._id,
         hasAccessToken: !!tokens.accessToken,
         hasRefreshToken: !!tokens.refreshToken
       });
+
+      // Store refresh token in database for rotation tracking
+      const expiresIn = rememberMe
+        ? process.env['JWT_REFRESH_EXPIRES_IN_REMEMBERED'] || '180d'
+        : process.env['JWT_REFRESH_EXPIRES_IN'] || '90d';
+
+      const deviceName = req.get('x-device-name');
+      const platform = req.get('x-device-platform');
+      const appVersion = req.get('x-app-version');
+      const deviceInfo = {
+        ...(deviceName && { deviceName }),
+        ...(platform && { platform }),
+        ...(appVersion && { appVersion }),
+      };
+
+      await authService.storeRefreshToken(
+        tokens.refreshToken,
+        new mongoose.Types.ObjectId(user._id),
+        expiresIn,
+        deviceInfo,
+        req.ip,
+        req.get('user-agent')
+      );
 
       // Update last login
       user.lastLogin = new Date();
@@ -183,7 +207,7 @@ export class AuthController {
   }
 
   /**
-   * Refresh access token
+   * Refresh access token with token rotation
    */
   async refreshToken(req: Request, res: Response): Promise<void> {
     try {
@@ -203,52 +227,35 @@ export class AuthController {
         return;
       }
 
-      logger.info('[AUTH] Verifying refresh token');
-      // Verify refresh token
-      const payload = authService.verifyRefreshToken(refreshToken);
-      logger.info('[AUTH] Refresh token verified', {
-        userId: payload.userId,
-        email: payload.email
-      });
+      logger.info('[AUTH] Validating and rotating refresh token');
 
-      // Find user to ensure they still exist and are active
-      const user = await User.findById(payload.userId).populate('storeId');
-      if (!user || !user.isActive) {
-        logger.warn('[AUTH] Refresh token failed - user not found or inactive', {
-          userId: payload.userId
-        });
-        res.status(401).json({
-          success: false,
-          message: 'User not found or inactive'
-        });
-        return;
-      }
+      // Validate and rotate refresh token (security best practice)
+      const deviceName = req.get('x-device-name');
+      const platform = req.get('x-device-platform');
+      const appVersion = req.get('x-app-version');
+      const deviceInfo = {
+        ...(deviceName && { deviceName }),
+        ...(platform && { platform }),
+        ...(appVersion && { appVersion }),
+      };
 
-      logger.info('[AUTH] User found, generating new access token', {
-        userId: user._id,
-        email: user.email
-      });
+      const rotatedTokens = await authService.validateAndRotateRefreshToken(
+        refreshToken,
+        deviceInfo,
+        req.ip,
+        req.get('user-agent')
+      );
 
-      // Generate new access token
-      const newAccessToken = authService.generateAccessToken({
-        userId: user._id.toString(),
-        email: user.email,
-        role: user.role,
-        storeId: user.storeId?.toString() || '',
-        permissions: user.permissions
-      });
-
-      logger.info('[AUTH] Token refreshed successfully', {
-        userId: user._id,
-        email: user.email,
-        hasAccessToken: !!newAccessToken
+      logger.info('[AUTH] Token refreshed and rotated successfully', {
+        isRemembered: rotatedTokens.isRemembered
       });
 
       res.status(200).json({
         success: true,
         message: 'Token refreshed successfully',
         data: {
-          accessToken: newAccessToken
+          accessToken: rotatedTokens.accessToken,
+          refreshToken: rotatedTokens.refreshToken, // Return new refresh token
         }
       });
 
@@ -259,7 +266,7 @@ export class AuthController {
       });
       res.status(401).json({
         success: false,
-        message: 'Invalid refresh token'
+        message: error instanceof Error ? error.message : 'Invalid refresh token'
       });
     }
   }
@@ -312,15 +319,27 @@ export class AuthController {
   }
 
   /**
-   * User logout (client-side token invalidation)
+   * User logout (revoke refresh tokens)
    */
   async logout(req: Request, res: Response): Promise<void> {
     try {
-      // In a stateless JWT system, logout is handled client-side
-      // by removing tokens from storage
-      // For enhanced security, you could implement a token blacklist
-      
-      logger.info(`User ${(req as any).user.email} logged out`);
+      const userId = (req as any).user.userId;
+      const { refreshToken, logoutAllDevices } = req.body;
+
+      logger.info(`User ${(req as any).user.email} logging out`, {
+        logoutAllDevices: !!logoutAllDevices
+      });
+
+      if (logoutAllDevices) {
+        // Revoke all refresh tokens for this user
+        await authService.revokeAllRefreshTokensForUser(
+          new mongoose.Types.ObjectId(userId),
+          'User logout from all devices'
+        );
+      } else if (refreshToken) {
+        // Revoke only the current refresh token
+        await authService.revokeRefreshToken(refreshToken, 'User logout');
+      }
 
       res.status(200).json({
         success: true,
