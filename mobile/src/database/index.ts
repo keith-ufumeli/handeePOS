@@ -92,11 +92,16 @@ async function initializeTables(sqlite: SQLite.SQLiteDatabase) {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
-      try { await sqlite.execAsync('ALTER TABLE products ADD COLUMN sync_version INTEGER'); } catch (_) { /* column may exist */ }
       CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
       CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
       CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
     `);
+    // Add sync_version for existing DBs created before this column existed
+    try {
+      await sqlite.execAsync('ALTER TABLE products ADD COLUMN sync_version INTEGER');
+    } catch (alterErr: any) {
+      if (!alterErr?.message?.includes('duplicate column')) throw alterErr;
+    }
 
     // Create categories table
     await sqlite.execAsync(`
