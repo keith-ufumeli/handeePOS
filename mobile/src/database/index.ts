@@ -88,9 +88,11 @@ async function initializeTables(sqlite: SQLite.SQLiteDatabase) {
         sync_status TEXT NOT NULL DEFAULT 'pending',
         last_synced_at INTEGER,
         server_id TEXT,
+        sync_version INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
+      try { await sqlite.execAsync('ALTER TABLE products ADD COLUMN sync_version INTEGER'); } catch (_) { /* column may exist */ }
       CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
       CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
       CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
@@ -147,11 +149,18 @@ async function initializeTables(sqlite: SQLite.SQLiteDatabase) {
         status TEXT NOT NULL DEFAULT 'pending',
         retry_count INTEGER NOT NULL DEFAULT 0,
         error_message TEXT,
-        timestamp INTEGER NOT NULL
+        timestamp INTEGER NOT NULL,
+        device_id TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
       CREATE INDEX IF NOT EXISTS idx_sync_queue_collection ON sync_queue(collection);
     `);
+    // Add device_id column for existing DBs that were created before this column existed
+    try {
+      await sqlite.execAsync('ALTER TABLE sync_queue ADD COLUMN device_id TEXT');
+    } catch (alterErr: any) {
+      if (!alterErr?.message?.includes('duplicate column')) throw alterErr;
+    }
 
     console.log('[DATABASE] Tables initialized successfully');
   } catch (error) {

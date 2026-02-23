@@ -18,6 +18,7 @@ export const products = sqliteTable('products', {
   syncStatus: text('sync_status').notNull().default('pending'), // 'synced', 'pending', 'failed'
   lastSyncedAt: integer('last_synced_at'),
   serverId: text('server_id'),
+  syncVersion: integer('sync_version'), // optional; for conflict detection on update
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
@@ -67,4 +68,5 @@ export const syncQueue = sqliteTable('sync_queue', {
   retryCount: integer('retry_count').notNull().default(0),
   errorMessage: text('error_message'),
   timestamp: integer('timestamp', { mode: 'timestamp' }).notNull(),
+  deviceId: text('device_id'), // optional; for offline tracking per blueprint
 });

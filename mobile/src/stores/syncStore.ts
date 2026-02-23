@@ -68,8 +68,8 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
     try {
       console.log('[SYNC_STORE] Starting sync with', pendingCount, 'pending items');
 
-      // Call the actual sync service
-      const result = await syncService.syncAll();
+      // Call the actual sync service (pass lastSyncTime for incremental pull)
+      const result = await syncService.syncAll(get().lastSyncTime);
 
       if (result.success) {
         console.log('[SYNC_STORE] Sync completed successfully');
@@ -81,7 +81,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
 
         set({
           syncStatus: 'synced',
-          lastSyncTime: new Date().toISOString(),
+          lastSyncTime: result.serverTimestamp ?? new Date().toISOString(),
           pendingCount: 0,
           error: null
         });

@@ -4,19 +4,23 @@ import { getDatabase, generateId } from '../database';
 import { products, categories, syncQueue } from '../database/schema';
 import { eq } from 'drizzle-orm';
 import apiService, { ApiResponse } from './apiService';
+import { getOrCreateDeviceId } from '../utils/deviceId';
 
 export interface SyncResult {
   success: boolean;
   syncedCount: number;
   failedCount: number;
   errors: string[];
+  /** Set after a successful pull when server returns serverTimestamp (for incremental pull). */
+  serverTimestamp?: string;
 }
 
 class SyncService {
   /**
-   * Sync all pending changes to server
+   * Sync all pending changes to server.
+   * @param lastSyncTime - Optional ISO timestamp or ms for incremental pull (updatedAfter).
    */
-  async syncAll(): Promise<SyncResult> {
+  async syncAll(lastSyncTime?: string | null): Promise<SyncResult> {
     const result: SyncResult = {
       success: true,
       syncedCount: 0,
@@ -78,8 +82,9 @@ class SyncService {
 
       console.log('[SYNC_SERVICE] Sync queue processing complete. Starting pullFromServer...');
 
-      // Pull latest data from server
-      await this.pullFromServer();
+      // Pull latest data from server (incremental when lastSyncTime is set)
+      const serverTimestamp = await this.pullFromServer(lastSyncTime);
+      if (serverTimestamp) result.serverTimestamp = serverTimestamp;
     } catch (error) {
       result.success = false;
       result.errors.push(`Sync failed: ${error}`);
@@ -142,10 +147,21 @@ class SyncService {
             .where(eq(products.id, documentId));
         }
         break;
-      case 'update':
+      case 'update': {
         if (!serverId) throw new Error('Cannot update product: Missing serverId');
-        await apiService.put(`/api/products/${serverId}`, data);
+        const localProduct = await db.select().from(products).where(eq(products.id, documentId)).limit(1);
+        const payload = { ...data };
+        if (localProduct.length > 0 && localProduct[0].syncVersion != null) {
+          payload.syncVersion = localProduct[0].syncVersion;
+        }
+        const updateResponse = await apiService.put(`/api/products/${serverId}`, payload) as any;
+        if (updateResponse?.data?.syncVersion != null) {
+          await db.update(products)
+            .set({ syncVersion: updateResponse.data.syncVersion, syncStatus: 'synced', lastSyncedAt: Date.now() })
+            .where(eq(products.id, documentId));
+        }
         break;
+      }
       case 'delete':
         if (!serverId) {
           console.warn('[SYNC_SERVICE] Cannot delete product: Missing serverId. It may have not been synced yet.');
@@ -252,16 +268,24 @@ class SyncService {
   }
 
   /**
-   * Pull latest data from server
+   * Pull latest data from server. When lastSyncTime is set, sends updatedAfter for incremental pull.
+   * @returns serverTimestamp from response when present (for storing as next lastSyncTime).
    */
-  private async pullFromServer(): Promise<void> {
+  private async pullFromServer(lastSyncTime?: string | null): Promise<string | undefined> {
+    let serverTimestamp: string | undefined;
+    const updatedAfter = lastSyncTime
+      ? (typeof lastSyncTime === 'string' && /^\d+$/.test(lastSyncTime) ? lastSyncTime : lastSyncTime)
+      : undefined;
+
     // Pull products (don't let errors stop category sync)
     try {
-      console.log('[SYNC_SERVICE] ===== Starting pullFromServer =====');
+      console.log('[SYNC_SERVICE] ===== Starting pullFromServer =====', updatedAfter ? { updatedAfter } : '');
       console.log('[SYNC_SERVICE] Fetching products from server...');
-      // Pull products
-      // Backend returns: { success: true, data: { products: [...], pagination: {...} } }
-      const productsResponse = await apiService.get<ApiResponse<any>>('/api/products');
+      // Pull products (with optional updatedAfter for incremental pull)
+      const productsUrl = updatedAfter
+        ? `/api/products?updatedAfter=${encodeURIComponent(updatedAfter)}`
+        : '/api/products';
+      const productsResponse = await apiService.get<ApiResponse<any>>(productsUrl);
       console.log('[SYNC_SERVICE] Products response:', {
         success: productsResponse.success,
         hasData: !!productsResponse.data,
@@ -273,6 +297,9 @@ class SyncService {
       });
 
       if (productsResponse.success && productsResponse.data) {
+        if (productsResponse.data.serverTimestamp) {
+          serverTimestamp = productsResponse.data.serverTimestamp;
+        }
         // Handle both response formats:
         // 1. { data: { products: [...], pagination: {...} } } - from GET /api/products
         // 2. { data: [...] } - direct array (for backward compatibility)
@@ -311,10 +338,12 @@ class SyncService {
       // Pull categories
       // Backend returns: { success: true, data: [...] } or { success: true, data: { categories: [...] } }
       console.log('[SYNC_SERVICE] Fetching categories from server...');
-      console.log('[SYNC_SERVICE] About to call makeRequest for /api/products/categories');
+      const categoriesUrl = updatedAfter
+        ? `/api/products/categories?updatedAfter=${encodeURIComponent(updatedAfter)}`
+        : '/api/products/categories';
       let categoriesResponse: ApiResponse<any>;
       try {
-        categoriesResponse = await apiService.get<ApiResponse<any>>('/api/products/categories');
+        categoriesResponse = await apiService.get<ApiResponse<any>>(categoriesUrl);
         console.log('[SYNC_SERVICE] Categories request completed successfully');
       } catch (requestError) {
         console.error('[SYNC_SERVICE] Categories request failed in try block:', {
@@ -336,6 +365,9 @@ class SyncService {
       });
 
       if (categoriesResponse.success && categoriesResponse.data) {
+        if (categoriesResponse.data.serverTimestamp && !serverTimestamp) {
+          serverTimestamp = categoriesResponse.data.serverTimestamp;
+        }
         // Handle both response formats
         const categoriesArray = Array.isArray(categoriesResponse.data)
           ? categoriesResponse.data
@@ -395,6 +427,7 @@ class SyncService {
 
       // Don't throw - allow sync to continue even if pull fails
     }
+    return serverTimestamp;
   }
 
   /**
@@ -480,6 +513,7 @@ class SyncService {
         }
 
         const now = Date.now();
+        const serverSyncVersion = serverProduct.syncVersion != null ? Number(serverProduct.syncVersion) : null;
         const productData = {
           name: String(serverProduct.name || ''),
           sku: String(serverProduct.sku || ''),
@@ -496,6 +530,7 @@ class SyncService {
           syncStatus: 'synced' as const,
           lastSyncedAt: now,
           serverId: serverId || null,
+          syncVersion: serverSyncVersion,
           updatedAt: new Date(now), // Drizzle timestamp mode expects Date object
         };
 
@@ -656,11 +691,13 @@ class SyncService {
     documentId: string,
     data: any
   ): Promise<void> {
+    const deviceId = await getOrCreateDeviceId();
     await dbHelpers.createSyncQueueItem({
       operation,
       collection,
       documentId,
       data,
+      deviceId,
     });
   }
 

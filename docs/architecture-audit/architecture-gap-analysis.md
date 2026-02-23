@@ -1,5 +1,7 @@
 # Architecture Gap Analysis — Blueprint vs Implementation
 
+**Note:** Sections 1–10 reflect the original blueprint comparison. **Post-remediation status** (below) describes gaps that were later addressed by the mobile-offline remediation and subsequent architecture-gap fixes.
+
 ## Executive Summary
 
 This document cross-checks the **current implementation** against the **handeePOS Technical Blueprint** and the **README**. Several **intended design elements are missing or implemented differently**: no dedicated sync API, no WatermelonDB (Drizzle + SQLite used instead), no incremental pull or lastSync, no conflict resolution using syncVersion, no local inventory update on offline sale, and no ID mapping for offline orders (so they fail to sync). The blueprint’s conflict rules (Orders always sync, Products server wins, Inventory with transaction log) are only partially reflected: orders are intended to sync but currently fail due to productId; products are server-wins on pull but with full overwrite and no version check; inventory has no transaction log. **Multi-store isolation** is implemented (storeId on queries). **Sync flow** (detect connectivity → pull → push → resolve conflicts → update timestamp) exists in spirit on the client but without proper push semantics (no batch, no idempotency) and without real conflict resolution.
@@ -189,6 +191,25 @@ This document cross-checks the **current implementation** against the **handeePO
 - **Optimistic concurrency (syncVersion)**: Schema present; not used in APIs.
 - **Inventory reservation**: Not implemented.
 - **Payment confirmation webhook / reconciliation**: Not implemented.
+
+---
+
+## Post-remediation status
+
+The following gaps identified above were addressed by the **mobile-offline remediation** and (where noted) by the **architecture-gap fixes**:
+
+| Gap | Status | How addressed |
+|-----|--------|----------------|
+| Orders "always sync" broken (productId) | **Fixed** | syncService maps local productId to serverId before POST /api/orders; local order updated with serverId and server orderNumber after successful push. |
+| Local inventory not decremented on offline sale | **Fixed** | createOrderWithStockAndSyncQueue (and orderStore) decrement local stock when creating an order; stock validation before create. |
+| No idempotency for push | **Fixed** | Backend order create accepts X-Idempotency-Key and caches response (24h TTL); mobile sends documentId as key on order push. |
+| Order + enqueue not transactional | **Fixed** | createOrderWithStockAndSyncQueue runs order insert, stock decrements, and sync queue insert in one transaction (or same steps when driver has no transaction). |
+| No serverId on local order after push | **Fixed** | updateOrderSyncResult called from syncService after successful order create; local order row gets serverId, orderNumber, syncStatus, lastSyncedAt. |
+| deviceId not sent in order payload | **Fixed** | orderStore uses getOrCreateDeviceId() and includes deviceId in order and sync payload; backend receives req.body.deviceId. |
+| cashierId "current_user" | **Fixed** | orderStore uses useAuthStore.getState().user?.userId ?? 'offline'. |
+| Sync queue "syncing" never retried | **Fixed** | resetStaleSyncingItems() at start of syncAll(); items stuck in "syncing" >5 min reset to pending. |
+
+**Remaining (addressed by architecture-gap fixes plan):** dedicated sync API, incremental pull (updatedAfter), syncVersion in product update, deviceId in sync_queue schema, inventory adjustment transaction log. See implementation for current state of those items.
 
 ---
 

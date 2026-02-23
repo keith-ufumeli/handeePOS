@@ -38,6 +38,7 @@ export interface Product {
   syncStatus: string;
   lastSyncedAt?: number | null;
   serverId?: string | null;
+  syncVersion?: number | null;
   createdAt: Date;
   updatedAt: Date;
   
@@ -99,7 +100,8 @@ export interface SyncQueueItem {
   retryCount: number;
   errorMessage?: string | null;
   timestamp: Date;
-  
+  deviceId?: string | null;
+
   // Computed properties (not in DB)
   syncData?: any;
   isPending?: boolean;
@@ -128,6 +130,7 @@ export function productFromDb(row: any): Product {
     syncStatus: row.sync_status,
     lastSyncedAt: row.last_synced_at,
     serverId: row.server_id,
+    syncVersion: row.sync_version ?? null,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };
@@ -216,6 +219,7 @@ export function syncQueueFromDb(row: any): SyncQueueItem {
     retryCount: row.retry_count,
     errorMessage: row.error_message,
     timestamp: new Date(row.timestamp),
+    deviceId: row.device_id ?? null,
   };
   
   // Add computed properties

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import Order from '@/models/Order';
 import Product from '@/models/Product';
 import Customer from '@/models/Customer';
+import InventoryAdjustment from '@/models/InventoryAdjustment';
 import { sendSuccess, sendError } from '@/utils/response';
 import logger from '@/utils/logger';
 import { TokenPayload } from '@/services/authService';
@@ -50,6 +51,8 @@ export class OrderController {
           throw new Error('Order must have at least one item');
         }
 
+        const stockAdjustments: { productId: mongoose.Types.ObjectId; previousQuantity: number; newQuantity: number; delta: number }[] = [];
+
         // Check product availability and update stock
         for (const item of items) {
           const product = await Product.findOne({
@@ -65,6 +68,15 @@ export class OrderController {
           if (product.stockQuantity < item.quantity) {
             throw new Error(`Insufficient stock for ${item.productName}. Available: ${product.stockQuantity}`);
           }
+
+          const previousQuantity = product.stockQuantity;
+          const newQuantity = previousQuantity - item.quantity;
+          stockAdjustments.push({
+            productId: new mongoose.Types.ObjectId(String(product._id)),
+            previousQuantity,
+            newQuantity,
+            delta: -item.quantity,
+          });
 
           // Update stock
           await Product.findByIdAndUpdate(
@@ -87,6 +99,25 @@ export class OrderController {
 
         const order = new Order(orderData);
         await order.save({ session });
+
+        // Inventory adjustment log (sale)
+        for (const adj of stockAdjustments) {
+          await InventoryAdjustment.create(
+            [
+              {
+                storeId,
+                productId: adj.productId,
+                previousQuantity: adj.previousQuantity,
+                newQuantity: adj.newQuantity,
+                delta: adj.delta,
+                reason: 'sale',
+                orderId: order._id,
+                performedBy: cashierId,
+              },
+            ],
+            { session }
+          );
+        }
 
         // Update customer stats if customer is provided
         if (customerId) {
@@ -358,13 +389,35 @@ export class OrderController {
           throw new Error('Cannot cancel completed order');
         }
 
-        // Restore stock for each item
+        const performedBy = (req as AuthenticatedRequest).user?.userId ?? 'system';
+
+        // Restore stock for each item and log adjustment
         for (const item of order.items) {
-          await Product.findByIdAndUpdate(
-            item.productId,
-            { $inc: { stockQuantity: item.quantity } },
-            { session }
-          );
+          const product = await Product.findById(item.productId).session(session);
+          if (product) {
+            const previousQuantity = product.stockQuantity;
+            const newQuantity = previousQuantity + item.quantity;
+            await Product.findByIdAndUpdate(
+              item.productId,
+              { $inc: { stockQuantity: item.quantity } },
+              { session }
+            );
+            await InventoryAdjustment.create(
+              [
+                {
+                  storeId,
+                  productId: item.productId,
+                  previousQuantity,
+                  newQuantity,
+                  delta: item.quantity,
+                  reason: 'cancellation',
+                  orderId: order._id,
+                  performedBy,
+                },
+              ],
+              { session }
+            );
+          }
         }
 
         // Update order status

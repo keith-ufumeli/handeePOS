@@ -381,6 +381,7 @@ export async function createOrderWithStockAndSyncQueue(
       status: 'pending',
       retryCount: 0,
       timestamp: new Date(),
+      deviceId: (syncQueueData as { deviceId?: string })?.deviceId ?? null,
     });
   };
 
@@ -444,6 +445,7 @@ export async function createSyncQueueItem(data: {
   collection: string;
   documentId: string;
   data: any;
+  deviceId?: string | null;
 }): Promise<SyncQueueItem> {
   const db = await getDatabase();
   const id = await generateId();
@@ -457,6 +459,7 @@ export async function createSyncQueueItem(data: {
     status: 'pending',
     retryCount: 0,
     timestamp: new Date(),
+    deviceId: data.deviceId ?? null,
   });
 
   const result = await db.select().from(syncQueue).where(eq(syncQueue.id, id)).limit(1);

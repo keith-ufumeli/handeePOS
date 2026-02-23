@@ -18,6 +18,8 @@ import orderRoutes from './routes/orders';
 import customerRoutes from './routes/customers';
 import reportRoutes from './routes/reports';
 import settingsRoutes from './routes/settings';
+import syncRoutes from './routes/sync';
+import inventoryRoutes from './routes/inventory';
 
 // Import error handling middleware
 import { errorHandler, notFound } from './middleware/errorHandler';
@@ -65,6 +67,8 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/sync', syncRoutes);
+app.use('/api/inventory', inventoryRoutes);
 
 // Root route
 app.get('/', (_req, res) => {
@@ -80,6 +84,8 @@ app.get('/', (_req, res) => {
       customers: '/api/customers',
       reports: '/api/reports',
       settings: '/api/settings',
+      sync: '/api/sync',
+      inventory: '/api/inventory',
       docs: '/api-docs'
     }
   });

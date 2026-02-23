@@ -43,11 +43,26 @@ export class CategoryController {
         return;
       }
 
+      const { updatedAfter } = req.query;
+      const query: any = { storeId, isActive: true };
+      if (updatedAfter) {
+        const after = typeof updatedAfter === 'string' && /^\d+$/.test(updatedAfter)
+          ? new Date(Number(updatedAfter))
+          : new Date(updatedAfter as string);
+        if (!isNaN(after.getTime())) {
+          query.updatedAt = { $gte: after };
+        }
+      }
+
       logger.info('[CATEGORY_CONTROLLER] Querying categories with storeId:', storeId);
-      const categories = await Category.find({ storeId, isActive: true })
+      const categories = await Category.find(query)
         .sort({ name: 1 });
 
       logger.info('[CATEGORY_CONTROLLER] Found categories:', categories.length);
+      if (updatedAfter !== undefined) {
+        sendSuccess(res, { categories, serverTimestamp: new Date().toISOString() });
+        return;
+      }
       sendSuccess(res, categories);
     } catch (error: any) {
       logger.error('[CATEGORY_CONTROLLER] Error fetching categories:', {
