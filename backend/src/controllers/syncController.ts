@@ -63,7 +63,7 @@ export class SyncController {
   /**
    * GET /api/sync/status - Return server timestamp and message (for client to check before full pull).
    */
-  static async getStatus(req: { user?: TokenPayload }, res: Response): Promise<void> {
+  static async getStatus(_req: { user?: TokenPayload }, res: Response): Promise<void> {
     sendSuccess(res, {
       serverTimestamp: new Date().toISOString(),
       message: 'OK',

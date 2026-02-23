@@ -1,5 +1,7 @@
 # Risk & Severity Matrix — HandeePOS Architecture Audit
 
+**Note:** This matrix was verified against the codebase. Code remediations for the listed risks have been implemented where applicable. See **Post-remediation verification** below for current status.
+
 ## Executive Summary
 
 This matrix consolidates risks identified across the **mobile offline**, **backend sync**, **inventory consistency**, and **blueprint gap** audits. Each risk is rated by **layer**, **severity**, **likelihood** (in typical low-connectivity / multi-device POS use), **impact**, and **notes**. The highest concentration of **Critical** and **High** risks is in the **sync and offline order path** (broken push due to productId, no idempotency, no local inventory update) and **inventory consistency** (negative stock possible, no reservation). Use this matrix to prioritize remediation for production deployment, especially in regions with unreliable networks and multiple devices per store.
@@ -33,6 +35,20 @@ This matrix consolidates risks identified across the **mobile offline**, **backe
 | Two devices sell “last unit” offline then sync | Mobile + Backend | High | Medium (multi-device) | One order fails “Insufficient stock” or negative stock | No reservation; both decrement locally then push; server serializes. |
 | No inventory adjustment transaction log (blueprint) | Backend | Medium | N/A | No audit trail; harder reconciliation | Blueprint asks for adjustment log; not implemented. |
 | Product schema min:0 not enforced on $inc result | Backend | Critical | When concurrent/duplicate | Negative stock possible | MongoDB $inc can go negative; schema validate not applied same way. |
+
+---
+
+## Post-remediation verification
+
+The following risks have been **fixed in code** (verified against current codebase). The Risk Matrix Table above is retained as the original audit snapshot.
+
+**Critical — fixed:** Offline order push (productId mapping in syncService); local inventory not decremented (createOrderWithStockAndSyncQueue decrements local stock); no idempotency (X-Idempotency-Key in orderController + mobile); negative stock under concurrency (atomic conditional decrement in orderController); Product min:0 / $inc (same conditional update).
+
+**High — fixed:** Sync queue "syncing" never retried (resetStaleSyncingItems at sync start); no transactional order+enqueue (createOrderWithStockAndSyncQueue uses db.transaction); full pull only (updatedAfter/lastSync in syncController); local order not updated after push (updateOrderSyncResult in syncService); cashierId "current_user" (orderStore uses userId ?? 'offline'); dedicated sync API not implemented (/api/sync mounted); syncVersion not used (productController optional syncVersion + 409); no recovery of "syncing" items (same as resetStaleSyncingItems); manual stock overwrite / no adjustment log (InventoryAdjustment model and writes).
+
+**Medium — fixed:** No deviceId or idempotency in payload (deviceId and idempotency key sent); order number format (local order updated with server orderNumber after push); no inventory adjustment log (InventoryAdjustment implemented).
+
+**Not code fixes (design / ops):** No inventory reservation; cancel restores stock but not payment; no background sync worker; payment confirmed locally but sync never succeeds; two devices sell "last unit" (mitigated by server atomic decrement); Drizzle vs WatermelonDB (low).
 
 ---
 
@@ -80,4 +96,4 @@ This matrix consolidates risks identified across the **mobile offline**, **backe
 
 ---
 
-*This matrix is derived from the mobile-offline, backend-sync, inventory-consistency, and architecture-gap audits. No code was modified.*
+*This matrix is derived from the mobile-offline, backend-sync, inventory-consistency, and architecture-gap audits. Post-remediation verification: code fixes for the above risks have been implemented; the matrix table reflects the original audit state.*
