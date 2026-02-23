@@ -25,6 +25,12 @@ class SyncService {
     };
 
     try {
+      // Recover items stuck in 'syncing' from a previous crash
+      const resetCount = await dbHelpers.resetStaleSyncingItems();
+      if (resetCount > 0) {
+        console.log('[SYNC_SERVICE] Reset stale syncing items to pending:', resetCount);
+      }
+
       // Get all pending sync queue items
       const pendingItems = await dbHelpers.getPendingSyncItems();
 
@@ -196,17 +202,46 @@ class SyncService {
   }
 
   /**
-   * Sync order to server
+   * Sync order to server.
+   * For create: maps local productIds to serverIds so backend can find products.
    */
   private async syncOrder(operation: SyncOperation, data: any, documentId: string): Promise<void> {
-    // Orders might not need serverId lookup if they are always created with one or don't sync back updates in the same way
-    // But for consistency, let's implement it if needed. 
-    // Assuming orders are mostly 'create'.
-
     switch (operation) {
-      case 'create':
-        await apiService.post('/api/orders', data);
+      case 'create': {
+        // Resolve local productIds to serverIds (backend expects MongoDB ObjectIds)
+        const items = Array.isArray(data.items) ? data.items : [];
+        const db = await getDatabase();
+        const mappedItems: any[] = [];
+        for (const item of items) {
+          const localProductId = item.productId;
+          if (!localProductId) {
+            throw new Error(`Order item missing productId (productName: ${item.productName ?? 'unknown'})`);
+          }
+          const rows = await db.select({ serverId: products.serverId }).from(products).where(eq(products.id, localProductId)).limit(1);
+          const serverId = rows[0]?.serverId;
+          if (!serverId) {
+            throw new Error(`Product not yet synced to server: ${item.productName ?? localProductId}. Sync products first.`);
+          }
+          mappedItems.push({ ...item, productId: serverId });
+        }
+        const payload = { ...data, items: mappedItems };
+        const response = await apiService.post<{ success?: boolean; data?: any }>(
+          '/api/orders',
+          payload,
+          { 'X-Idempotency-Key': documentId }
+        );
+        const order = response?.data ?? response;
+        const serverId = order?._id ?? order?.id;
+        if (serverId) {
+          await dbHelpers.updateOrderSyncResult(documentId, {
+            serverId: String(serverId),
+            orderNumber: order?.orderNumber,
+            syncStatus: 'synced',
+            lastSyncedAt: Date.now(),
+          });
+        }
         break;
+      }
       case 'update':
         await apiService.put(`/api/orders/${data.serverId || data.id}`, data);
         break;

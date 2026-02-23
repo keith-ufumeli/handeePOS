@@ -595,10 +595,11 @@ class ApiService {
     return this.makeRequest<T>(endpoint);
   }
 
-  async post<T = any>(endpoint: string, data?: any): Promise<T> {
+  async post<T = any>(endpoint: string, data?: any, headers?: Record<string, string>): Promise<T> {
     return this.makeRequest<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
+      headers,
     });
   }
 

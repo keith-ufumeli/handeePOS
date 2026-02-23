@@ -1,4 +1,4 @@
-import { eq, and, or, like, gte, lte, desc, asc, sql } from 'drizzle-orm';
+import { eq, and, or, like, gte, lte, lt, desc, asc, sql } from 'drizzle-orm';
 import { getDatabase, generateId } from './index';
 import { products, categories, orders, syncQueue } from './schema';
 import { Product, Category, Order, SyncQueueItem, productFromDb, categoryFromDb, orderFromDb, syncQueueFromDb } from './types';
@@ -155,6 +155,23 @@ export async function deleteProduct(id: string): Promise<void> {
     .where(eq(products.id, id));
 }
 
+/**
+ * Decrement product stock by quantity (e.g. after local sale). Throws if product not found or insufficient stock.
+ */
+export async function decrementProductStock(productId: string, quantity: number): Promise<void> {
+  if (quantity <= 0) return;
+  const product = await getProductById(productId);
+  if (!product) throw new Error(`Product ${productId} not found`);
+  if (product.stockQuantity < quantity) {
+    throw new Error(`Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, requested: ${quantity}`);
+  }
+  const db = await getDatabase();
+  const newStock = Math.max(0, product.stockQuantity - quantity);
+  await db.update(products)
+    .set({ stockQuantity: newStock, updatedAt: new Date(), syncStatus: 'pending' })
+    .where(eq(products.id, productId));
+}
+
 // Categories helpers
 export async function getAllCategories(): Promise<Category[]> {
   const db = await getDatabase();
@@ -293,7 +310,127 @@ export async function updateOrder(id: string, data: Partial<{
   return order;
 }
 
+/**
+ * Create order, decrement stock for each item, and add sync queue entry in a single transaction.
+ * Note: expo-sqlite driver may have limited rollback behavior; this still improves atomicity when supported.
+ */
+export async function createOrderWithStockAndSyncQueue(
+  orderData: {
+    orderNumber: string;
+    cashierId: string;
+    customerId?: string;
+    items: string;
+    subtotal: number;
+    taxAmount: number;
+    discountAmount: number;
+    total: number;
+    payments: string;
+    status: string;
+    customNote?: string;
+  },
+  items: { productId: string; quantity: number }[],
+  syncQueueData: Record<string, unknown>
+): Promise<Order> {
+  const db = await getDatabase();
+  const id = await generateId();
+  const queueId = await generateId();
+  const now = Date.now();
+
+  const runInTx = async (tx: any) => {
+    await tx.insert(orders).values({
+      id,
+      orderNumber: orderData.orderNumber,
+      cashierId: orderData.cashierId,
+      customerId: orderData.customerId || null,
+      items: orderData.items,
+      subtotal: orderData.subtotal,
+      taxAmount: orderData.taxAmount,
+      discountAmount: orderData.discountAmount,
+      total: orderData.total,
+      payments: orderData.payments,
+      status: orderData.status,
+      customNote: orderData.customNote || null,
+      syncStatus: 'pending',
+      createdAt: new Date(now),
+      completedAt: orderData.status === 'completed' ? new Date(now) : null,
+    });
+
+    for (const item of items) {
+      const rows = await tx.select().from(products).where(eq(products.id, item.productId)).limit(1);
+      const row = rows[0];
+      if (!row) throw new Error(`Product ${item.productId} not found`);
+      const current = row.stockQuantity ?? 0;
+      if (current < item.quantity) {
+        throw new Error(`Insufficient stock for product ${item.productId}. Available: ${current}`);
+      }
+      await tx.update(products)
+        .set({
+          stockQuantity: Math.max(0, current - item.quantity),
+          updatedAt: new Date(),
+          syncStatus: 'pending',
+        })
+        .where(eq(products.id, item.productId));
+    }
+
+    await tx.insert(syncQueue).values({
+      id: queueId,
+      operation: 'create',
+      collection: 'orders',
+      documentId: id,
+      data: JSON.stringify(syncQueueData),
+      status: 'pending',
+      retryCount: 0,
+      timestamp: new Date(),
+    });
+  };
+
+  if (typeof db.transaction === 'function') {
+    await db.transaction(runInTx);
+  } else {
+    // Fallback when driver does not support transaction (e.g. some expo-sqlite builds)
+    await runInTx(db);
+  }
+
+  const order = await getOrderById(id);
+  if (!order) throw new Error('Failed to create order');
+  return order;
+}
+
+/**
+ * Update local order after successful sync push (serverId, server orderNumber, sync status).
+ */
+export async function updateOrderSyncResult(
+  localOrderId: string,
+  result: { serverId: string; orderNumber?: string; syncStatus?: string; lastSyncedAt?: number }
+): Promise<void> {
+  const db = await getDatabase();
+  const updateData: Record<string, unknown> = {
+    serverId: result.serverId,
+    syncStatus: result.syncStatus ?? 'synced',
+    lastSyncedAt: result.lastSyncedAt ?? Date.now(),
+  };
+  if (result.orderNumber !== undefined) {
+    updateData.orderNumber = result.orderNumber;
+  }
+  await db.update(orders).set(updateData as any).where(eq(orders.id, localOrderId));
+}
+
 // Sync queue helpers
+
+const STALE_SYNCING_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Reset queue items stuck in 'syncing' (e.g. after app crash) to 'pending' so they are retried.
+ */
+export async function resetStaleSyncingItems(olderThanMs: number = STALE_SYNCING_MS): Promise<number> {
+  const db = await getDatabase();
+  const threshold = new Date(Date.now() - olderThanMs);
+  const rows = await db.update(syncQueue)
+    .set({ status: 'pending' })
+    .where(and(eq(syncQueue.status, 'syncing'), lt(syncQueue.timestamp, threshold)));
+  return rows.changes ?? 0;
+}
+
 export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
   const db = await getDatabase();
   const results = await db.select().from(syncQueue)

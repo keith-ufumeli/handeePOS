@@ -3,7 +3,8 @@ import * as dbHelpers from "../database/db-helpers";
 import { Order } from "../database/types";
 import syncService from '../services/syncService';
 import { CartItem } from "./cartStore";
-// Sync service is imported as singleton
+import { useAuthStore } from "./authStore";
+import { getOrCreateDeviceId } from "../utils/deviceId";
 
 export interface OrderFilters {
   status?: string;
@@ -66,6 +67,9 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
+      const cashierId = useAuthStore.getState().user?.userId ?? 'offline';
+      const deviceId = await getOrCreateDeviceId();
+
       // Calculate totals
       const subtotal = cartItems.reduce((sum, item) => sum + item.subtotal, 0);
       const discountAmount = cartItems.reduce(
@@ -78,27 +82,10 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       }, 0);
       const total = subtotal - discountAmount + taxAmount;
 
-      // Generate order number
       const orderNumber = `ORD-${Date.now()}`;
-
-      const newOrder = await dbHelpers.createOrder({
+      const syncPayload = {
         orderNumber,
-        cashierId: "current_user", // TODO: Get from auth store
-        customerId,
-        items: JSON.stringify(cartItems),
-        subtotal,
-        taxAmount,
-        discountAmount,
-        total,
-        payments: JSON.stringify(paymentMethods),
-        status: "completed",
-        customNote,
-      });
-
-      // Add to sync queue
-      await syncService.addToSyncQueue("create", "orders", newOrder.id, {
-        orderNumber,
-        cashierId: "current_user",
+        cashierId,
         customerId,
         items: cartItems,
         subtotal,
@@ -108,7 +95,27 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         payments: paymentMethods,
         status: "completed",
         customNote,
-      });
+        deviceId,
+      };
+
+      // Single transaction: order insert + stock decrement + sync queue entry
+      const newOrder = await dbHelpers.createOrderWithStockAndSyncQueue(
+        {
+          orderNumber,
+          cashierId,
+          customerId,
+          items: JSON.stringify(cartItems),
+          subtotal,
+          taxAmount,
+          discountAmount,
+          total,
+          payments: JSON.stringify(paymentMethods),
+          status: "completed",
+          customNote,
+        },
+        cartItems.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+        syncPayload
+      );
 
       // Reload orders
       await get().loadOrders(get().filters);

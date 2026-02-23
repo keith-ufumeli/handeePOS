@@ -7,6 +7,14 @@ import logger from '@/utils/logger';
 import { TokenPayload } from '@/services/authService';
 import mongoose from 'mongoose';
 
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const idempotencyCache = new Map<string, { body: any; expiry: number }>();
+
+function getIdempotencyKey(req: Request | AuthenticatedRequest): string | undefined {
+  const key = req.get('X-Idempotency-Key') ?? (req.headers['x-idempotency-key'] as string);
+  return key && String(key).trim() ? String(key).trim() : undefined;
+}
+
 interface AuthenticatedRequest extends Omit<Request, 'user'> {
   user: TokenPayload;
 }
@@ -16,10 +24,19 @@ export class OrderController {
    * Create a new order
    */
   static async createOrder(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const idempotencyKey = getIdempotencyKey(req);
+    if (idempotencyKey) {
+      const cached = idempotencyCache.get(idempotencyKey);
+      if (cached && cached.expiry > Date.now()) {
+        res.status(200).json(cached.body);
+        return;
+      }
+    }
+
     const session = await mongoose.startSession();
-    
+
     try {
-      await session.withTransaction(async () => {
+      const populatedOrder = await session.withTransaction(async () => {
         const storeId = req.user?.storeId;
         const cashierId = req.user?.userId;
         const { items, customerId, customNote, payments } = req.body;
@@ -89,13 +106,29 @@ export class OrderController {
         }
 
         // Populate the order with related data
-        const populatedOrder = await Order.findById(order._id)
+        const populated = await Order.findById(order._id)
           .populate('cashierId', 'fullName email')
           .populate('customerId', 'name email phoneNumber')
-          .session(session);
+          .session(session)
+          .lean();
 
-        sendSuccess(res, populatedOrder, 'Order created successfully', 201);
+        return populated;
       });
+
+      const responseBody = {
+        success: true,
+        data: populatedOrder,
+        message: 'Order created successfully'
+      };
+
+      if (idempotencyKey) {
+        idempotencyCache.set(idempotencyKey, {
+          body: responseBody,
+          expiry: Date.now() + IDEMPOTENCY_TTL_MS
+        });
+      }
+
+      res.status(201).json(responseBody);
     } catch (error: any) {
       logger.error('Error creating order:', error);
       sendError(res, error.message || 'Failed to create order', 500);
