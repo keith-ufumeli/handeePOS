@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IProduct extends Document {
-  _id: string;
+  _id: mongoose.Types.ObjectId;
   storeId: mongoose.Types.ObjectId;
   name: string;
   sku: string;

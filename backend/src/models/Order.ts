@@ -18,7 +18,7 @@ export interface IPaymentMethod {
 }
 
 export interface IOrder extends Document {
-  _id: string;
+  _id: mongoose.Types.ObjectId;
   orderNumber: string;
   storeId: mongoose.Types.ObjectId;
   cashierId: mongoose.Types.ObjectId;
