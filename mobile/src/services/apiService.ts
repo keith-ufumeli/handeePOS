@@ -3,9 +3,12 @@ import NetInfo from '@react-native-community/netinfo';
 import secureStorage from './secureStorage';
 import { config } from '../config';
 
-const API_BASE_URL = __DEV__ 
+const API_BASE_URL = __DEV__
   ? (Platform.OS === 'ios' ? config.apiUrl : 'https://handeepos.onrender.com')
   : 'https://your-production-api.com';
+
+// Allow time for Render.com cold start (~30–60s on free tier)
+const REQUEST_TIMEOUT_MS = 60000;
 
 const AUTH_TOKEN_KEY = config.authTokenKey;
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -184,11 +187,19 @@ class ApiService {
       isRetry
     });
 
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        const err = new Error('Request timed out');
+        (err as any).name = 'AbortError';
+        reject(err);
+      }, REQUEST_TIMEOUT_MS);
+    });
+
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
+      const response = await Promise.race([
+        fetch(url, { ...options, headers }),
+        timeoutPromise,
+      ]);
 
       // Update last online time on successful connection
       if (response.status !== 0) { // 0 means network error
@@ -297,13 +308,16 @@ class ApiService {
       if (error instanceof TypeError) {
         errorDetails.isNetworkError = true;
       }
+      const isAbort = error instanceof Error && (error as any).name === 'AbortError';
 
       console.error('[API_SERVICE] Request error:', JSON.stringify(errorDetails, null, 2));
 
       // Create a more descriptive error message
       let errorMessage = 'Network request failed';
-      if (error instanceof TypeError && error.message.includes('Network request failed')) {
-        errorMessage = `Cannot connect to server at ${url}. Please check your connection.`;
+      if (isAbort) {
+        errorMessage = 'Request timed out. The server may be starting up—please try again in a moment.';
+      } else if (error instanceof TypeError && error.message.includes('Network request failed')) {
+        errorMessage = `Cannot connect to server at ${url}. If the server was idle, it may be starting up—try again in a moment. Otherwise check your connection.`;
       } else if (error instanceof Error) {
         errorMessage = error.message;
       }
