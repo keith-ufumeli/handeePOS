@@ -53,37 +53,35 @@ export class OrderController {
 
         const stockAdjustments: { productId: mongoose.Types.ObjectId; previousQuantity: number; newQuantity: number; delta: number }[] = [];
 
-        // Check product availability and update stock
+        // Atomic conditional decrement: only update if stockQuantity >= item.quantity to prevent negative stock under concurrency
         for (const item of items) {
-          const product = await Product.findOne({
-            _id: item.productId,
-            storeId,
-            isActive: true
-          }).session(session);
+          const updated = await Product.findOneAndUpdate(
+            {
+              _id: item.productId,
+              storeId,
+              isActive: true,
+              stockQuantity: { $gte: item.quantity },
+            },
+            { $inc: { stockQuantity: -item.quantity } },
+            { session, new: true }
+          );
 
-          if (!product) {
-            throw new Error(`Product ${item.productName} not found or inactive`);
-          }
-
-          if (product.stockQuantity < item.quantity) {
+          if (!updated) {
+            const product = await Product.findOne({ _id: item.productId, storeId }).session(session);
+            if (!product) {
+              throw new Error(`Product ${item.productName} not found or inactive`);
+            }
             throw new Error(`Insufficient stock for ${item.productName}. Available: ${product.stockQuantity}`);
           }
 
-          const previousQuantity = product.stockQuantity;
-          const newQuantity = previousQuantity - item.quantity;
+          const newQuantity = updated.stockQuantity;
+          const previousQuantity = newQuantity + item.quantity;
           stockAdjustments.push({
-            productId: new mongoose.Types.ObjectId(String(product._id)),
+            productId: new mongoose.Types.ObjectId(String(updated._id)),
             previousQuantity,
             newQuantity,
             delta: -item.quantity,
           });
-
-          // Update stock
-          await Product.findByIdAndUpdate(
-            item.productId,
-            { $inc: { stockQuantity: -item.quantity } },
-            { session }
-          );
         }
 
         // Create order

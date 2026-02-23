@@ -4,6 +4,8 @@
 
 The backend **does not expose dedicated sync endpoints** (`/api/sync/push`, `/api/sync/pull`, `/api/sync/status`). The technical blueprint and README reference them, but **app.ts mounts no sync routes**. The mobile app implements “sync” by calling standard REST APIs: **POST /api/orders**, **GET /api/products**, **GET /api/products/categories**, and product/category create/update/delete. Order creation is **transactional** (MongoDB session) and uses **atomic `$inc`** for inventory deduction, which is correct. However, **order creation is not idempotent**: duplicate requests create duplicate orders and double inventory deduction. **syncVersion** exists on the Product model but is **not used** in any API for conflict detection or last-write-wins. There is **no server-side sync status**, **no cursor or lastSync** for pull, and **no device-scoped or idempotency-key handling**. **Severity: High** for production offline-first use.
 
+**Note:** This audit was written **before** the architecture-gap remediation. See the **Post-remediation status** section below for what has since been implemented (dedicated sync API, idempotency, syncVersion, incremental pull, sync status).
+
 ---
 
 ## Current Implementation Summary
@@ -12,6 +14,7 @@ The backend **does not expose dedicated sync endpoints** (`/api/sync/push`, `/ap
 
 - **Mounted routes** (app.ts): `/api` (index), `/api/auth`, `/api/products`, `/api/orders`, `/api/customers`, `/api/reports`, `/api/settings`. **No `/api/sync` router.**
 - **Index route** lists `sync: '/api/sync'` in endpoint info, but that path is not implemented.
+- **Post-remediation:** Sync routes are mounted at `/api/sync` (GET /status, POST /pull, POST /push).
 
 ### Order Creation (POST /api/orders)
 
@@ -19,9 +22,11 @@ The backend **does not expose dedicated sync endpoints** (`/api/sync/push`, `/ap
 - **Flow**: Validates `storeId`, `cashierId`, `items`; for each item finds product by `_id: item.productId`, checks `stockQuantity >= item.quantity`, then `Product.findByIdAndUpdate(..., { $inc: { stockQuantity: -item.quantity } }, { session })`; creates Order with `orderData` (no `orderNumber` in body — generated in pre-save); updates Customer if `customerId`; returns populated order.
 - **Order number**: Generated in `OrderSchema.pre('save')`: pattern `ORD-YYYYMMDD-NNN` (date + sequence per day). Client-supplied `orderNumber` in body is **not** used; server always overwrites.
 - **Idempotency**: None. Same body sent twice → two orders, inventory decremented twice.
+- **Post-remediation:** Idempotency: `X-Idempotency-Key` header supported; cached response returned on duplicate key.
 
 ### Product & Category APIs
 
+- **Post-remediation:** GET /api/products and GET /api/products/categories accept optional `updatedAfter` for incremental pull and return `serverTimestamp` when used; product update supports optional `syncVersion` with 409 on conflict.
 - **GET /api/products**: List with filters (search, category, lowStock), pagination, sort. No `updatedAfter` or `lastSync` query params.
 - **GET /api/products/categories**: List categories. No incremental params.
 - **POST/PUT/DELETE** products and categories: Standard CRUD. No `syncVersion` check; no conditional update (e.g. “update only if syncVersion matches”).
@@ -131,9 +136,23 @@ The backend **does not expose dedicated sync endpoints** (`/api/sync/push`, `/ap
 
 | Blueprint / Docs | Implemented | Notes |
 |------------------|-------------|--------|
-| POST /api/sync/push | No | Mobile uses POST /api/orders, etc. |
-| POST /api/sync/pull | No | Mobile uses GET /api/products, GET /api/products/categories |
-| GET /api/sync/status | No | Not implemented |
+| POST /api/sync/push | Yes | Implemented in architecture-gap remediation; mobile may still use direct REST or switch to sync endpoints. |
+| POST /api/sync/pull | Yes | Implemented in architecture-gap remediation; mobile may still use direct REST or switch to sync endpoints. |
+| GET /api/sync/status | Yes | Implemented in architecture-gap remediation. |
+
+---
+
+## Post-remediation status
+
+The following were implemented in the architecture-gap remediation and are now in place:
+
+- **Dedicated sync API:** Implemented. Router at `/api/sync`; GET `/api/sync/status`, POST `/api/sync/pull`, POST `/api/sync/push`. See [backend/src/routes/sync.ts](backend/src/routes/sync.ts) and [backend/src/controllers/syncController.ts](backend/src/controllers/syncController.ts).
+- **Order idempotency:** Implemented. `X-Idempotency-Key` header; in-memory cache with TTL; repeat key returns 200 and cached response. See [backend/src/controllers/orderController.ts](backend/src/controllers/orderController.ts).
+- **syncVersion:** Implemented. Product update accepts optional `syncVersion`; 409 if mismatch; response includes new syncVersion.
+- **Incremental pull:** Implemented. GET `/api/products` and GET `/api/products/categories` accept `updatedAfter`; return `serverTimestamp` when used. POST `/api/sync/pull` accepts `updatedAfter`/`lastSync` and optional `entityTypes`, returns single payload with `serverTimestamp`.
+- **Sync status:** GET `/api/sync/status` returns `serverTimestamp` and message.
+- **Order items / server IDs:** Backend contract unchanged; mobile maps local to server IDs before sync (client-side fix).
+- **Batch push:** POST `/api/sync/push` accepts batch operations (including multiple orders) with per-operation idempotency.
 
 ---
 
