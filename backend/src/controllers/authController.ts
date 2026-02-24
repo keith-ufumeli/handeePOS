@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import User from '@/models/User';
+import RefreshToken from '@/models/RefreshToken';
 import authService from '@/services/authService';
 import logger from '@/utils/logger';
 import { validationResult } from 'express-validator';
@@ -146,10 +147,12 @@ export class AuthController {
         ? process.env['JWT_REFRESH_EXPIRES_IN_REMEMBERED'] || '180d'
         : process.env['JWT_REFRESH_EXPIRES_IN'] || '90d';
 
+      const deviceId = req.get('x-device-id');
       const deviceName = req.get('x-device-name');
       const platform = req.get('x-device-platform');
       const appVersion = req.get('x-app-version');
       const deviceInfo = {
+        ...(deviceId && { deviceId }),
         ...(deviceName && { deviceName }),
         ...(platform && { platform }),
         ...(appVersion && { appVersion }),
@@ -168,11 +171,27 @@ export class AuthController {
       user.lastLogin = new Date();
       await user.save();
 
+      // Issue Offline Capability Token (OCT) if deviceId provided and secret configured.
+      // The mobile client will encrypt this before storing it (handled in P4).
+      let offlineCapabilityToken: string | undefined;
+      if (deviceId) {
+        try {
+          const tokenPayload = authService.verifyAccessToken(tokens.accessToken);
+          offlineCapabilityToken = authService.generateOfflineCapabilityToken(tokenPayload, deviceId);
+          logger.info('[AUTH] OCT issued', { userId: user._id, deviceId });
+        } catch (octError) {
+          logger.warn('[AUTH] OCT generation skipped (JWT_DEVICE_SECRET may not be configured)', {
+            error: octError instanceof Error ? octError.message : String(octError),
+          });
+        }
+      }
+
       logger.info('[AUTH] User logged in successfully', {
         userId: user._id,
         email: user.email,
         role: user.role,
-        storeId: user.storeId?._id || user.storeId
+        storeId: user.storeId?._id || user.storeId,
+        octIssued: !!offlineCapabilityToken,
       });
 
       res.status(200).json({
@@ -189,7 +208,10 @@ export class AuthController {
             lastLogin: user.lastLogin
           },
           store: user.storeId,
-          tokens
+          tokens: {
+            ...tokens,
+            ...(offlineCapabilityToken && { offlineCapabilityToken }),
+          },
         }
       });
 
@@ -247,16 +269,35 @@ export class AuthController {
       );
 
       logger.info('[AUTH] Token refreshed and rotated successfully', {
-        isRemembered: rotatedTokens.isRemembered
+        isRemembered: rotatedTokens.isRemembered,
       });
+
+      // Re-issue OCT on every refresh so the mobile client's offline TTL resets.
+      // DeviceId is resolved from the request header first, then the stored token's deviceInfo.
+      let offlineCapabilityToken: string | undefined;
+      const refreshDeviceId = req.get('x-device-id') ?? rotatedTokens.resolvedDeviceId;
+      if (refreshDeviceId) {
+        try {
+          offlineCapabilityToken = authService.generateOfflineCapabilityToken(
+            rotatedTokens.payload,
+            refreshDeviceId
+          );
+          logger.info('[AUTH] OCT re-issued on token refresh', { deviceId: refreshDeviceId });
+        } catch (octError) {
+          logger.warn('[AUTH] OCT re-issue skipped', {
+            error: octError instanceof Error ? octError.message : String(octError),
+          });
+        }
+      }
 
       res.status(200).json({
         success: true,
         message: 'Token refreshed successfully',
         data: {
           accessToken: rotatedTokens.accessToken,
-          refreshToken: rotatedTokens.refreshToken, // Return new refresh token
-        }
+          refreshToken: rotatedTokens.refreshToken,
+          ...(offlineCapabilityToken && { offlineCapabilityToken }),
+        },
       });
 
     } catch (error) {
@@ -448,6 +489,101 @@ export class AuthController {
         success: false,
         message: 'Internal server error'
       });
+    }
+  }
+
+  /**
+   * Register or update a device for offline login capability.
+   *
+   * Associates the provided deviceId with the user's most recent active
+   * refresh token. Called by the mobile client after a successful online login
+   * to confirm the device is authorised for future offline sessions.
+   */
+  async registerDevice(req: Request, res: Response): Promise<void> {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
+        return;
+      }
+
+      const userId = (req as any).user.userId;
+      const { deviceId, deviceName, platform, appVersion } = req.body;
+
+      // Find the most recent active refresh token for this user and update deviceInfo
+      const activeToken = await RefreshToken.findOne({
+        userId: new mongoose.Types.ObjectId(userId),
+        isRevoked: false,
+        expiresAt: { $gt: new Date() },
+      }).sort({ createdAt: -1 });
+
+      if (!activeToken) {
+        res.status(404).json({
+          success: false,
+          message: 'No active session found. Please log in again.',
+        });
+        return;
+      }
+
+      activeToken.deviceInfo = {
+        deviceId,
+        ...(deviceName && { deviceName }),
+        ...(platform && { platform }),
+        ...(appVersion && { appVersion }),
+      };
+      await activeToken.save();
+
+      logger.info('[AUTH] Device registered', { userId, deviceId });
+
+      res.status(200).json({
+        success: true,
+        message: 'Device registered successfully',
+        data: { deviceId },
+      });
+    } catch (error) {
+      logger.error('[AUTH] Device registration error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Validate the current session server-side (PENDING_SYNC flow).
+   *
+   * The mobile client calls this after reconnecting from an offline session
+   * to confirm the account has not been revoked or deactivated while offline.
+   *
+   * Returns status: 'valid' | 'revoked'.
+   * A missing/expired access token is handled by the authenticate middleware (401).
+   */
+  async validateSession(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = (req as any).user.userId;
+
+      const user = await User.findById(userId).select('isActive role permissions storeId email');
+
+      if (!user || !user.isActive) {
+        logger.warn('[AUTH] Session validate — user not found or inactive', { userId });
+        res.status(200).json({
+          success: true,
+          data: { status: 'revoked', reason: 'Account is inactive or does not exist' },
+        });
+        return;
+      }
+
+      logger.info('[AUTH] Session validated', { userId });
+
+      res.status(200).json({
+        success: true,
+        data: {
+          status: 'valid',
+          userId,
+          role: user.role,
+          permissions: user.permissions,
+        },
+      });
+    } catch (error) {
+      logger.error('[AUTH] Session validate error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
     }
   }
 

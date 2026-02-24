@@ -115,6 +115,32 @@ export const validateRegister: ValidationChain[] = [
 ];
 
 /**
+ * Device registration validation rules
+ */
+export const validateDeviceRegister: ValidationChain[] = [
+  body('deviceId')
+    .notEmpty()
+    .withMessage('Device ID is required')
+    .isString()
+    .isLength({ min: 1, max: 128 })
+    .withMessage('Device ID must be between 1 and 128 characters'),
+  body('deviceName')
+    .optional()
+    .isString()
+    .isLength({ max: 100 })
+    .withMessage('Device name must be at most 100 characters'),
+  body('platform')
+    .optional()
+    .isIn(['ios', 'android', 'web'])
+    .withMessage('Platform must be ios, android, or web'),
+  body('appVersion')
+    .optional()
+    .isString()
+    .isLength({ max: 20 })
+    .withMessage('App version must be at most 20 characters'),
+];
+
+/**
  * Store creation validation rules
  */
 export const validateStoreCreation: ValidationChain[] = [

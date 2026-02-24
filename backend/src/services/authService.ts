@@ -19,17 +19,36 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
+/**
+ * Offline Capability Token payload.
+ * Issued by the server and signed with JWT_DEVICE_SECRET.
+ * The mobile client encrypts this before storage (P4).
+ */
+export interface OctPayload {
+  userId: string;
+  deviceId: string;
+  email: string;
+  role: string;
+  storeId: string;
+  permissions: string[];
+  /** SHA-256 of JSON.stringify(permissions.sort()) — detects permission changes offline */
+  permissionsHash: string;
+  octVersion: string;
+}
+
 class AuthService {
   private readonly JWT_SECRET = process.env['JWT_SECRET'] || 'your-secret-key';
   private readonly JWT_REFRESH_SECRET = process.env['JWT_REFRESH_SECRET'] || 'your-refresh-secret-key';
   private readonly JWT_DEVICE_SECRET = process.env['JWT_DEVICE_SECRET'];
-  // Extended token lifetimes for POS offline-first operations
-  private readonly ACCESS_TOKEN_EXPIRES_IN = process.env['JWT_EXPIRES_IN'] || '24h'; // Extended from 1h for offline use
-  private readonly ACCESS_TOKEN_EXPIRES_IN_REMEMBERED = process.env['JWT_EXPIRES_IN_REMEMBERED'] || '7d';
-  private readonly REFRESH_TOKEN_EXPIRES_IN = process.env['JWT_REFRESH_EXPIRES_IN'] || '90d'; // Extended from 30d
-  private readonly REFRESH_TOKEN_EXPIRES_IN_REMEMBERED = process.env['JWT_REFRESH_EXPIRES_IN_REMEMBERED'] || '180d'; // Extended from 90d
-  private readonly DEVICE_TOKEN_EXPIRES_IN = process.env['JWT_DEVICE_EXPIRES_IN'] || '365d'; // Extended from 120d for trusted devices
-  private readonly OFFLINE_GRACE_PERIOD_DAYS = 7; // Allow 7 days offline before requiring re-auth
+  // Short-lived access tokens — offline access is handled by the Offline Capability Token (OCT), not long-lived JWTs
+  private readonly ACCESS_TOKEN_EXPIRES_IN = process.env['JWT_EXPIRES_IN'] || '15m';
+  private readonly ACCESS_TOKEN_EXPIRES_IN_REMEMBERED = process.env['JWT_EXPIRES_IN_REMEMBERED'] || '15m';
+  private readonly REFRESH_TOKEN_EXPIRES_IN = process.env['JWT_REFRESH_EXPIRES_IN'] || '7d';
+  private readonly REFRESH_TOKEN_EXPIRES_IN_REMEMBERED = process.env['JWT_REFRESH_EXPIRES_IN_REMEMBERED'] || '30d';
+  // OCT: 24 hours — bounds the revocation risk window to one business day
+  private readonly OCT_EXPIRES_IN = process.env['JWT_OCT_EXPIRES_IN'] || '24h';
+  private readonly DEVICE_TOKEN_EXPIRES_IN = process.env['JWT_DEVICE_EXPIRES_IN'] || '365d';
+  private readonly OFFLINE_GRACE_PERIOD_DAYS = 7;
 
   /**
    * Hash password using bcrypt
@@ -339,7 +358,13 @@ class AuthService {
     },
     ipAddress?: string,
     userAgent?: string
-  ): Promise<{ accessToken: string; refreshToken: string; isRemembered: boolean }> {
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    isRemembered: boolean;
+    payload: TokenPayload;
+    resolvedDeviceId: string | undefined;
+  }> {
     logger.info('[AUTH_SERVICE] Validating and rotating refresh token');
 
     // Verify JWT signature and expiration
@@ -365,11 +390,12 @@ class AuthService {
     storedToken.lastUsedAt = new Date();
     await storedToken.save();
 
-    // Determine if this was a "remember me" token based on expiration
+    // Determine if this was a "remember me" token based on expiration.
+    // Threshold sits between normal (7d) and remembered (30d) lifetimes.
     const daysUntilExpiry = Math.floor(
       (storedToken.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
     );
-    const isRemembered = daysUntilExpiry > 60; // If more than 60 days, consider it "remembered"
+    const isRemembered = daysUntilExpiry > 10;
 
     // Generate new tokens
     const newRefreshToken = this.generateRefreshToken(payload, isRemembered);
@@ -400,6 +426,8 @@ class AuthService {
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
       isRemembered,
+      payload,
+      resolvedDeviceId: deviceInfo?.deviceId ?? storedToken.deviceInfo?.deviceId,
     };
   }
 
@@ -473,6 +501,67 @@ class AuthService {
     }
 
     return new Date(now + milliseconds);
+  }
+
+  /**
+   * Generate an Offline Capability Token (OCT).
+   *
+   * The OCT is a short-lived JWT (24h) signed with JWT_DEVICE_SECRET, bound to
+   * a specific userId + deviceId pair. The mobile client encrypts it at rest
+   * using a key derived from the user's password (PBKDF2 — handled in P4).
+   *
+   * Fails gracefully if JWT_DEVICE_SECRET is not configured: callers should
+   * treat a missing OCT as "offline login unavailable on this device".
+   */
+  generateOfflineCapabilityToken(payload: TokenPayload, deviceId: string): string {
+    if (!this.JWT_DEVICE_SECRET) {
+      throw new Error('JWT_DEVICE_SECRET is not configured — OCT cannot be issued');
+    }
+
+    const permissionsHash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify([...payload.permissions].sort()))
+      .digest('hex');
+
+    const octPayload: OctPayload = {
+      userId: payload.userId,
+      deviceId,
+      email: payload.email,
+      role: payload.role,
+      storeId: payload.storeId,
+      permissions: payload.permissions,
+      permissionsHash,
+      octVersion: '1',
+    };
+
+    logger.info('[AUTH_SERVICE] Generating OCT', { userId: payload.userId, deviceId });
+
+    return jwt.sign(octPayload, this.JWT_DEVICE_SECRET, {
+      expiresIn: this.OCT_EXPIRES_IN,
+      issuer: 'handeepos-api',
+      audience: 'handeepos-mobile',
+    } as SignOptions);
+  }
+
+  /**
+   * Verify an Offline Capability Token (OCT).
+   * Used by the session/validate endpoint and the PENDING_SYNC flow.
+   */
+  verifyOfflineCapabilityToken(token: string): OctPayload {
+    if (!this.JWT_DEVICE_SECRET) {
+      throw new Error('JWT_DEVICE_SECRET is not configured');
+    }
+    try {
+      return jwt.verify(token, this.JWT_DEVICE_SECRET, {
+        issuer: 'handeepos-api',
+        audience: 'handeepos-mobile',
+      }) as OctPayload;
+    } catch (error) {
+      logger.error('[AUTH_SERVICE] OCT verification failed:', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error('Invalid or expired offline capability token');
+    }
   }
 
   /**
