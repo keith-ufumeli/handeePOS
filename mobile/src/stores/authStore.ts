@@ -8,12 +8,20 @@
  *   - `user`        → AsyncStorage (non-sensitive profile data only)
  *   - tokens        → per-user Secure Store via authStorage (P3)
  *   - `authStatus`  → NOT persisted; derived on every app start by initialize()
+ *   - `isAuthenticated` → derived from authStatus + _sessionOCT; NOT persisted
  *
  * Token lifecycle:
  *   - Access token  → in-memory only (apiService.authToken)
  *   - Refresh token → per-user Secure Store; apiService holds in-memory copy
  *   - OCT           → per-user Secure Store (encrypted with PBKDF2+AES-GCM)
  *                     + in-memory plaintext for the current online session
+ *
+ * isAuthenticated rules:
+ *   - ONLINE_AUTHENTICATED              → true (active server-validated session)
+ *   - PENDING_SYNC                      → true (mid-sync; keep user in app)
+ *   - OFFLINE_AUTHENTICATED + _sessionOCT non-null → true (active offline session)
+ *   - OFFLINE_AUTHENTICATED + _sessionOCT null     → false (needs offline re-auth)
+ *   - SESSION_EXPIRED / INVALIDATED / UNAUTHENTICATED → false
  */
 
 import { create } from 'zustand';
@@ -21,6 +29,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiService from '../services/apiService';
 import { decodeJWT, extractStoreIdFromToken } from '../utils/jwtDecoder';
+import { getOrCreateDeviceId } from '../utils/deviceId';
 import { AuthStatus, AuthUser } from '../types/auth';
 import {
   addKnownUser,
@@ -32,18 +41,39 @@ import {
   getUserRefreshToken,
   hasUserPriorAuth,
   resetUserOfflineAttempts,
+  // P6 — offline login
+  isUserOfflineLocked,
+  getUserOfflineLockUntil,
+  setUserOfflineLockUntil,
+  getUserOfflineToken,
+  getUserOfflineSalt,
+  getUserOfflineAttempts,
+  incrementUserOfflineAttempts,
+  clearUserOfflineLock,
 } from '../services/authStorage';
-import { generateSalt, encryptOCT, isCryptoAvailable } from '../services/cryptoService';
+import { generateSalt, encryptOCT, decryptOCT, isCryptoAvailable } from '../services/cryptoService';
 import networkMonitor from '../services/networkMonitor';
 
 // ─── Backward-compatible alias ─────────────────────────────────────────────────
 // Existing screens that import `User` from authStore continue to work.
 export type User = AuthUser;
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const MAX_OFFLINE_ATTEMPTS = 5;
+
 // ─── State & Actions ──────────────────────────────────────────────────────────
 
 interface AuthStoreState {
   authStatus: AuthStatus;
+  /**
+   * True when the user has an active, usable session.
+   * Derived from authStatus + _sessionOCT — kept in state so existing screens
+   * that destructure `isAuthenticated` continue to work without changes.
+   *
+   * Computation: see computeIsAuthenticated() below.
+   */
+  isAuthenticated: boolean;
   user: AuthUser | null;
   isLoading: boolean;
   isHydrated: boolean;
@@ -51,10 +81,10 @@ interface AuthStoreState {
   statusMessage: string | null;
   error: string | null;
   /**
-   * In-memory plaintext OCT for the current online session.
-   * Populated on login and on every background refresh.
+   * In-memory plaintext OCT for the current session.
+   * Populated on online login, on background refresh, and on successful offline login.
    * NOT persisted — lost on app kill (intentional).
-   * Used by P6 offline login flow to check OCT validity before prompting password.
+   * When non-null with OFFLINE_AUTHENTICATED → isAuthenticated is true.
    */
   _sessionOCT: string | null;
 }
@@ -62,6 +92,12 @@ interface AuthStoreState {
 interface AuthStoreActions {
   /** Full online login flow. Requires internet. */
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  /**
+   * Offline login using the encrypted OCT stored from the last online session.
+   * Validates device binding, OCT TTL, and enforces exponential-backoff lockout.
+   * Requires no network connection. Fails gracefully if OCT has expired.
+   */
+  offlineLogin: (userId: string, password: string) => Promise<void>;
   /** Log out from the current device. Clears all per-user session data. */
   logout: () => Promise<void>;
   /**
@@ -87,12 +123,29 @@ interface AuthStoreActions {
 
 export type AuthState = AuthStoreState & AuthStoreActions;
 
+// ─── Helper ───────────────────────────────────────────────────────────────────
+
+/**
+ * Computes the `isAuthenticated` boolean from an auth status + current OCT.
+ *
+ * The OCT check for OFFLINE_AUTHENTICATED distinguishes:
+ *   - Active offline session (OCT in memory → true)
+ *   - App restarted while offline, password not yet entered (null → false)
+ */
+function computeIsAuthenticated(status: AuthStatus, sessionOCT: string | null): boolean {
+  if (status === AuthStatus.ONLINE_AUTHENTICATED) return true;
+  if (status === AuthStatus.PENDING_SYNC) return true;
+  if (status === AuthStatus.OFFLINE_AUTHENTICATED) return sessionOCT !== null;
+  return false;
+}
+
 // ─── Store ─────────────────────────────────────────────────────────────────────
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       authStatus: AuthStatus.UNAUTHENTICATED,
+      isAuthenticated: false,
       user: null,
       isLoading: false,
       isHydrated: false,
@@ -103,13 +156,13 @@ export const useAuthStore = create<AuthState>()(
       // ─── transitionTo ────────────────────────────────────────────────────────
 
       transitionTo(status, message = null) {
-        console.log(`[AUTH_STORE] Transition → ${status}`, message ? `(${message})` : '');
-        set({
-          authStatus: status,
-          statusMessage: message,
-          // isAuthenticated kept for backward compatibility with existing screens
-          isLoading: false,
-        });
+        const { _sessionOCT } = get();
+        const isAuthenticated = computeIsAuthenticated(status, _sessionOCT);
+        console.log(
+          `[AUTH_STORE] Transition → ${status} (isAuthenticated=${isAuthenticated})`,
+          message ? `(${message})` : ''
+        );
+        set({ authStatus: status, isAuthenticated, statusMessage: message, isLoading: false });
       },
 
       setStatusMessage(msg) {
@@ -192,6 +245,7 @@ export const useAuthStore = create<AuthState>()(
           set({
             user: mappedUser,
             authStatus: AuthStatus.ONLINE_AUTHENTICATED,
+            isAuthenticated: true,
             _sessionOCT: offlineCapabilityToken ?? null,
             isLoading: false,
             error: null,
@@ -201,6 +255,149 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Login failed';
           console.error('[AUTH_STORE] Login error:', message);
+          set({ error: message, isLoading: false });
+        }
+      },
+
+      // ─── offlineLogin ─────────────────────────────────────────────────────────
+
+      offlineLogin: async (userId, password) => {
+        console.log('[AUTH_STORE] Offline login initiated for userId:', userId);
+        set({ isLoading: true, error: null });
+
+        try {
+          // ── 1. Lockout check ──────────────────────────────────────────────────
+          const locked = await isUserOfflineLocked(userId);
+          if (locked) {
+            const lockUntil = await getUserOfflineLockUntil(userId);
+            const remainingMs = lockUntil ? new Date(lockUntil).getTime() - Date.now() : 0;
+            const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
+            const waitMsg =
+              remainingSec >= 60
+                ? `${Math.ceil(remainingSec / 60)} minute(s)`
+                : `${remainingSec} second(s)`;
+            set({
+              error: `Too many failed attempts. Please try again in ${waitMsg}.`,
+              isLoading: false,
+            });
+            return;
+          }
+
+          // ── 2. Attempt gate ───────────────────────────────────────────────────
+          const attempts = await getUserOfflineAttempts(userId);
+          if (attempts >= MAX_OFFLINE_ATTEMPTS) {
+            // Hard cap — shouldn't be reachable if lockout check above is working,
+            // but guard in case the lock_until key was cleared externally.
+            get().transitionTo(
+              AuthStatus.SESSION_EXPIRED,
+              'Maximum offline login attempts reached. Please connect to the internet to sign in.'
+            );
+            return;
+          }
+
+          // ── 3. Retrieve encrypted OCT and salt ───────────────────────────────
+          const encryptedOCT = await getUserOfflineToken(userId);
+          const salt = await getUserOfflineSalt(userId);
+
+          if (!encryptedOCT || !salt) {
+            set({
+              error: 'Offline login is not available. Please connect to the internet to sign in.',
+              isLoading: false,
+            });
+            return;
+          }
+
+          // ── 4. Decrypt OCT — wrong password throws here ───────────────────────
+          let decryptedOCT: string;
+          try {
+            decryptedOCT = await decryptOCT(encryptedOCT, password, salt);
+          } catch {
+            // AES-GCM auth-tag mismatch → wrong password (or corrupted data)
+            const newAttempts = await incrementUserOfflineAttempts(userId);
+
+            if (newAttempts >= MAX_OFFLINE_ATTEMPTS) {
+              // 5th failure → force online re-auth
+              get().transitionTo(
+                AuthStatus.SESSION_EXPIRED,
+                'Maximum offline login attempts reached. Please connect to the internet to sign in.'
+              );
+              return;
+            }
+
+            // Apply exponential-backoff lockout
+            if (newAttempts === 4) {
+              const lockUntil = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+              await setUserOfflineLockUntil(userId, lockUntil);
+              set({
+                error: `Incorrect password. Locked for 2 minutes. ${MAX_OFFLINE_ATTEMPTS - newAttempts} attempt(s) remaining.`,
+                isLoading: false,
+              });
+            } else if (newAttempts === 3) {
+              const lockUntil = new Date(Date.now() + 30 * 1000).toISOString();
+              await setUserOfflineLockUntil(userId, lockUntil);
+              set({
+                error: `Incorrect password. Locked for 30 seconds. ${MAX_OFFLINE_ATTEMPTS - newAttempts} attempt(s) remaining.`,
+                isLoading: false,
+              });
+            } else {
+              set({
+                error: `Incorrect password. ${MAX_OFFLINE_ATTEMPTS - newAttempts} attempt(s) remaining.`,
+                isLoading: false,
+              });
+            }
+            return;
+          }
+
+          // ── 5. Decode OCT payload ─────────────────────────────────────────────
+          const octPayload = decodeJWT(decryptedOCT);
+
+          if (!octPayload) {
+            set({
+              error: 'Session data is corrupted. Please connect to the internet to sign in.',
+              isLoading: false,
+            });
+            return;
+          }
+
+          // ── 5a. TTL check ─────────────────────────────────────────────────────
+          const nowSeconds = Math.floor(Date.now() / 1000);
+          if (octPayload.exp !== undefined && octPayload.exp < nowSeconds) {
+            get().transitionTo(
+              AuthStatus.SESSION_EXPIRED,
+              'Your offline session has expired. Please connect to the internet to sign in.'
+            );
+            return;
+          }
+
+          // ── 5b. Device binding check ──────────────────────────────────────────
+          if (octPayload.deviceId) {
+            const currentDeviceId = await getOrCreateDeviceId();
+            if (octPayload.deviceId !== currentDeviceId) {
+              console.warn('[AUTH_STORE] OCT device binding mismatch', {
+                oct: octPayload.deviceId,
+                device: currentDeviceId,
+              });
+              get().transitionTo(
+                AuthStatus.INVALIDATED,
+                'This session is not valid for this device. Please sign in online.'
+              );
+              return;
+            }
+          }
+
+          // ── 6. Success ────────────────────────────────────────────────────────
+          await resetUserOfflineAttempts(userId);
+          await clearUserOfflineLock(userId);
+
+          // Place decrypted OCT in memory — this makes isAuthenticated true when
+          // transitionTo(OFFLINE_AUTHENTICATED) is called below.
+          set({ _sessionOCT: decryptedOCT });
+          get().transitionTo(AuthStatus.OFFLINE_AUTHENTICATED, null);
+
+          console.log('[AUTH_STORE] Offline login successful for userId:', userId);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Offline login failed';
+          console.error('[AUTH_STORE] Offline login error:', message);
           set({ error: message, isLoading: false });
         }
       },
@@ -241,6 +438,7 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           authStatus: AuthStatus.UNAUTHENTICATED,
+          isAuthenticated: false,
           _sessionOCT: null,
           isLoading: false,
           error: null,
@@ -260,9 +458,8 @@ export const useAuthStore = create<AuthState>()(
         // Stop refresh timer — no network, no point refreshing
         apiService.stopRefreshTimer();
 
-        // If user has a session OCT in-memory, offline auth is available.
-        // If not (e.g. JWT_DEVICE_SECRET not configured), still go offline —
-        // P6 will validate OCT availability more precisely.
+        // _sessionOCT is non-null here (set during login/refresh), so
+        // transitionTo will compute isAuthenticated: true — user stays in tabs.
         get().transitionTo(
           AuthStatus.OFFLINE_AUTHENTICATED,
           user ? null : 'No active user session'
@@ -303,19 +500,31 @@ export const useAuthStore = create<AuthState>()(
             get().transitionTo(AuthStatus.ONLINE_AUTHENTICATED, null);
             console.log('[AUTH_STORE] PENDING_SYNC resolved → ONLINE_AUTHENTICATED');
           } else {
-            get().transitionTo(AuthStatus.SESSION_EXPIRED, 'Your session has expired. Please sign in again.');
+            get().transitionTo(
+              AuthStatus.SESSION_EXPIRED,
+              'Your session has expired. Please sign in again.'
+            );
           }
         } catch (error: any) {
           const msg = error instanceof Error ? error.message : String(error);
-          const is401 = msg.includes('401') || msg.toLowerCase().includes('unauthorized') || msg.toLowerCase().includes('revoked');
+          const is401 =
+            msg.includes('401') ||
+            msg.toLowerCase().includes('unauthorized') ||
+            msg.toLowerCase().includes('revoked');
 
           if (is401) {
             console.warn('[AUTH_STORE] PENDING_SYNC: account revoked → INVALIDATED');
-            get().transitionTo(AuthStatus.INVALIDATED, 'Your account access has changed. Please sign in again or contact your manager.');
+            get().transitionTo(
+              AuthStatus.INVALIDATED,
+              'Your account access has changed. Please sign in again or contact your manager.'
+            );
           } else {
             // Network error — stay offline, try again on next reconnect
             console.warn('[AUTH_STORE] PENDING_SYNC: server unreachable, staying OFFLINE_AUTHENTICATED');
-            get().transitionTo(AuthStatus.OFFLINE_AUTHENTICATED, "Couldn't verify with server. You can continue offline for now.");
+            get().transitionTo(
+              AuthStatus.OFFLINE_AUTHENTICATED,
+              "Couldn't verify with server. You can continue offline for now."
+            );
           }
         }
       },
@@ -330,7 +539,7 @@ export const useAuthStore = create<AuthState>()(
 
         if (!user?.userId) {
           console.log('[AUTH_STORE] No stored user — UNAUTHENTICATED');
-          set({ authStatus: AuthStatus.UNAUTHENTICATED, isLoading: false });
+          set({ authStatus: AuthStatus.UNAUTHENTICATED, isAuthenticated: false, isLoading: false });
           startNetworkMonitor();
           return;
         }
@@ -341,12 +550,11 @@ export const useAuthStore = create<AuthState>()(
         if (isOnline) {
           // Try to restore session via stored refresh token
           try {
-            // Prefer per-user authStorage; fall back to legacy flat key (apiService already loaded it)
             const storedRefreshToken = await getUserRefreshToken(user.userId) ?? null;
 
             if (!storedRefreshToken && !apiService['refreshToken']) {
               console.log('[AUTH_STORE] No refresh token found → SESSION_EXPIRED');
-              set({ authStatus: AuthStatus.SESSION_EXPIRED, isLoading: false });
+              set({ authStatus: AuthStatus.SESSION_EXPIRED, isAuthenticated: false, isLoading: false });
               startNetworkMonitor();
               return;
             }
@@ -369,34 +577,47 @@ export const useAuthStore = create<AuthState>()(
               if (newOCT) set({ _sessionOCT: newOCT });
 
               apiService.startRefreshTimer();
-              set({ authStatus: AuthStatus.ONLINE_AUTHENTICATED, isLoading: false });
+              set({
+                authStatus: AuthStatus.ONLINE_AUTHENTICATED,
+                isAuthenticated: true,
+                isLoading: false,
+              });
               console.log('[AUTH_STORE] Session restored → ONLINE_AUTHENTICATED');
             } else {
-              set({ authStatus: AuthStatus.SESSION_EXPIRED, isLoading: false });
+              set({ authStatus: AuthStatus.SESSION_EXPIRED, isAuthenticated: false, isLoading: false });
             }
           } catch (error: any) {
             const msg = error instanceof Error ? error.message : String(error);
             const is401 = msg.includes('401') || msg.toLowerCase().includes('unauthorized');
             if (is401) {
-              set({ authStatus: AuthStatus.INVALIDATED, isLoading: false });
+              set({ authStatus: AuthStatus.INVALIDATED, isAuthenticated: false, isLoading: false });
             } else {
               // Network error during init — fall to offline path
               const hasPrior = await hasUserPriorAuth(user.userId);
+              // _sessionOCT is null at init time → isAuthenticated: false for OFFLINE_AUTHENTICATED
               set({
-                authStatus: hasPrior ? AuthStatus.OFFLINE_AUTHENTICATED : AuthStatus.SESSION_EXPIRED,
+                authStatus: hasPrior
+                  ? AuthStatus.OFFLINE_AUTHENTICATED
+                  : AuthStatus.SESSION_EXPIRED,
+                isAuthenticated: false,
                 isLoading: false,
               });
             }
           }
         } else {
-          // Offline on startup
+          // Offline on startup — _sessionOCT is null → isAuthenticated: false
           const hasPrior = await hasUserPriorAuth(user.userId);
           if (hasPrior) {
-            console.log('[AUTH_STORE] Offline with prior auth → OFFLINE_AUTHENTICATED');
-            set({ authStatus: AuthStatus.OFFLINE_AUTHENTICATED, isLoading: false });
+            console.log('[AUTH_STORE] Offline with prior auth → OFFLINE_AUTHENTICATED (needs offline login)');
+            set({ authStatus: AuthStatus.OFFLINE_AUTHENTICATED, isAuthenticated: false, isLoading: false });
           } else {
             console.log('[AUTH_STORE] Offline, no prior auth → UNAUTHENTICATED');
-            set({ authStatus: AuthStatus.UNAUTHENTICATED, user: null, isLoading: false });
+            set({
+              authStatus: AuthStatus.UNAUTHENTICATED,
+              isAuthenticated: false,
+              user: null,
+              isLoading: false,
+            });
           }
         }
 
@@ -478,10 +699,9 @@ function resolveStoreId(raw: any): string {
 
 /**
  * @deprecated Use `useAuthStore(state => state.authStatus)` instead.
- * Kept so screens that check `isAuthenticated` continue to work during migration.
+ * Kept so any direct callers continue to compile during migration.
  */
 export const initializeAuth = async () => {
   // initialize() is now triggered automatically from onRehydrateStorage.
-  // This export is retained as a no-op for any direct callers.
   console.log('[AUTH_STORE] initializeAuth() called — initialization is handled by onRehydrateStorage');
 };

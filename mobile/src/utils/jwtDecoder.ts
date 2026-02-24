@@ -9,6 +9,8 @@ export interface DecodedToken {
   role: string;
   storeId: string;
   permissions: string[];
+  /** Present in Offline Capability Tokens (OCTs) — identifies the issuing device. */
+  deviceId?: string;
   iat?: number;
   exp?: number;
 }

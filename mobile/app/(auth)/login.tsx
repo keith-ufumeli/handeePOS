@@ -4,54 +4,130 @@ import { useRouter } from 'expo-router';
 import { ThemedView } from '../../components/themed-view';
 import { ThemedText } from '../../components/themed-text';
 import { useAuthStore } from '../../src/stores/authStore';
+import { AuthStatus } from '../../src/types/auth';
 
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-  const { login, error, isLoading, clearError, isAuthenticated } = useAuthStore();
 
-  // Navigate to home screen after successful login
+  const {
+    login,
+    offlineLogin,
+    error,
+    isLoading,
+    clearError,
+    isAuthenticated,
+    authStatus,
+    statusMessage,
+    user,
+  } = useAuthStore();
+
+  // Navigate to main app after any successful authentication (online or offline)
   useEffect(() => {
     if (isAuthenticated) {
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, router]);
 
-  const handleLogin = async () => {
-    console.log('[LOGIN_SCREEN] Login attempt started', {
-      email,
-      rememberMe,
-      hasPassword: !!password,
-      passwordLength: password.length
-    });
+  // Offline mode: app started offline, user has prior session on this device.
+  // Show password-only form — email is pre-filled from the stored user profile.
+  const isOfflineMode = authStatus === AuthStatus.OFFLINE_AUTHENTICATED;
 
+  const handleOnlineLogin = async () => {
     try {
-      console.log('[LOGIN_SCREEN] Calling login function from authStore');
       await login(email, password, rememberMe);
-      console.log('[LOGIN_SCREEN] Login function completed successfully');
-      // Navigation will be handled by useEffect when isAuthenticated changes
     } catch (err) {
-      console.error('[LOGIN_SCREEN] Login error caught:', {
-        error: err instanceof Error ? err.message : String(err),
-        errorType: err instanceof Error ? err.constructor.name : typeof err,
-        stack: err instanceof Error ? err.stack : undefined
-      });
+      console.error('[LOGIN_SCREEN] Online login error:', err instanceof Error ? err.message : String(err));
     }
   };
+
+  const handleOfflineLogin = async () => {
+    if (!user?.userId) return;
+    try {
+      await offlineLogin(user.userId, password);
+    } catch (err) {
+      console.error('[LOGIN_SCREEN] Offline login error:', err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  // ── Offline login UI ──────────────────────────────────────────────────────────
+  if (isOfflineMode) {
+    return (
+      <ThemedView style={styles.container}>
+        <ThemedText type="title" style={styles.title}>
+          Offline Sign In
+        </ThemedText>
+
+        <ThemedText style={styles.offlineInfo}>
+          You&apos;re offline. Enter your password to continue working.
+        </ThemedText>
+
+        {statusMessage ? (
+          <ThemedText style={styles.statusMessage}>{statusMessage}</ThemedText>
+        ) : null}
+
+        {/* Pre-filled user identity — read-only */}
+        <View style={[styles.input, styles.readonlyInput]}>
+          <ThemedText style={styles.readonlyText}>{user?.email ?? ''}</ThemedText>
+        </View>
+
+        {error ? (
+          <ThemedText style={styles.error}>{error}</ThemedText>
+        ) : null}
+
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          value={password}
+          onChangeText={(v) => {
+            clearError();
+            setPassword(v);
+          }}
+          secureTextEntry
+          autoFocus
+        />
+
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleOfflineLogin}
+          disabled={isLoading || !password}
+        >
+          <ThemedText style={styles.buttonText}>
+            {isLoading ? 'Verifying...' : 'Continue Offline'}
+          </ThemedText>
+        </TouchableOpacity>
+
+        <ThemedText style={styles.offlineFootnote}>
+          Offline access is limited to previously cached data.
+          Connect to the internet to sync the latest changes.
+        </ThemedText>
+      </ThemedView>
+    );
+  }
+
+  // ── Standard online login UI ──────────────────────────────────────────────────
+
+  // Show context-aware banner when redirected from expired / invalidated state
+  const contextBanner =
+    authStatus === AuthStatus.SESSION_EXPIRED || authStatus === AuthStatus.INVALIDATED
+      ? statusMessage
+      : null;
 
   return (
     <ThemedView style={styles.container}>
       <ThemedText type="title" style={styles.title}>
         Welcome Back
       </ThemedText>
-      
-      {error && (
-        <ThemedText style={styles.error}>
-          {error}
-        </ThemedText>
-      )}
+
+      {contextBanner ? (
+        <ThemedText style={styles.statusMessage}>{contextBanner}</ThemedText>
+      ) : null}
+
+      {error ? (
+        <ThemedText style={styles.error}>{error}</ThemedText>
+      ) : null}
 
       <TextInput
         style={styles.input}
@@ -72,7 +148,7 @@ export default function LoginScreen() {
 
       <TouchableOpacity
         style={styles.button}
-        onPress={handleLogin}
+        onPress={handleOnlineLogin}
         disabled={isLoading}
       >
         <ThemedText style={styles.buttonText}>
@@ -120,8 +196,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    marginBottom: 40,
+    marginBottom: 24,
     textAlign: 'center',
+  },
+  offlineInfo: {
+    textAlign: 'center',
+    marginBottom: 16,
+    color: '#555',
+  },
+  offlineFootnote: {
+    marginTop: 20,
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#888',
+  },
+  statusMessage: {
+    color: '#e67e00',
+    marginBottom: 16,
+    textAlign: 'center',
+    fontSize: 14,
   },
   input: {
     height: 50,
@@ -131,6 +224,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     marginBottom: 15,
     backgroundColor: '#fff',
+  },
+  readonlyInput: {
+    justifyContent: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  readonlyText: {
+    color: '#555',
   },
   button: {
     backgroundColor: '#0a7ea4',
@@ -147,7 +247,7 @@ const styles = StyleSheet.create({
   },
   error: {
     color: '#ff3b30',
-    marginBottom: 20,
+    marginBottom: 16,
     textAlign: 'center',
   },
   rememberMeContainer: {
