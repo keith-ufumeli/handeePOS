@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import secureStorage from './secureStorage';
 import { config } from '../config';
+import { getOrCreateDeviceId } from '../utils/deviceId';
 
 const API_BASE_URL = __DEV__
   ? (Platform.OS === 'ios' ? config.apiUrl : 'https://handeepos.onrender.com')
@@ -10,7 +11,7 @@ const API_BASE_URL = __DEV__
 // Allow time for Render.com cold start (~30–60s on free tier)
 const REQUEST_TIMEOUT_MS = 60000;
 
-const AUTH_TOKEN_KEY = config.authTokenKey;
+// AUTH_TOKEN_KEY removed — access tokens are no longer persisted to disk (P4).
 const REFRESH_TOKEN_KEY = 'refresh_token';
 const LAST_ONLINE_KEY = 'last_online_timestamp';
 
@@ -30,15 +31,32 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
   };
 }
 
+// Proactive access-token refresh fires 1 minute before the 15-minute expiry.
+const ACCESS_TOKEN_REFRESH_INTERVAL_MS = 14 * 60 * 1000;
+
+// Callback signature for consumers that need to persist rotated tokens.
+type TokenRefreshedCallback = (
+  newAccessToken: string,
+  newRefreshToken: string,
+  newOCT?: string
+) => void;
+
 class ApiService {
   private baseUrl: string;
+  /** Access token — in-memory ONLY. Never written to disk. */
   private authToken: string | null = null;
+  /** Refresh token — in-memory. Persisted to per-user authStorage by authStore. */
   private refreshToken: string | null = null;
   private tokenRestorePromise: Promise<void> | null = null;
   private isRefreshing = false;
   private refreshSubscribers: ((token: string) => void)[] = [];
   private sessionExpiredCallback: (() => void) | null = null;
+  /** Called by the auto-refresh path so authStore can persist rotated tokens. */
+  private tokenRefreshedCallback: TokenRefreshedCallback | null = null;
   private lastOnlineTime: Date | null = null;
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  /** Cached device ID — resolved once per session. */
+  private deviceId: string | null = null;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
@@ -50,6 +68,44 @@ class ApiService {
     this.sessionExpiredCallback = callback;
   }
 
+  /**
+   * Register a callback that fires whenever the 401-triggered or proactive
+   * token refresh succeeds. The authStore uses this to persist the rotated
+   * refresh token and any new OCT to the per-user authStorage namespace.
+   */
+  setTokenRefreshedCallback(callback: TokenRefreshedCallback) {
+    this.tokenRefreshedCallback = callback;
+  }
+
+  /**
+   * Start the proactive background refresh timer.
+   * Fires 1 minute before the 15-minute access token expires, so the user
+   * never hits an in-flight 401 mid-transaction.
+   * Call after every successful login or session restoration.
+   */
+  startRefreshTimer(): void {
+    this.stopRefreshTimer();
+    this.refreshTimer = setInterval(() => {
+      this.proactiveRefresh();
+    }, ACCESS_TOKEN_REFRESH_INTERVAL_MS);
+  }
+
+  /** Stop the background refresh timer. Call on logout or when going offline. */
+  stopRefreshTimer(): void {
+    if (this.refreshTimer !== null) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+  }
+
+  /** Returns the device ID, generating and caching it on first call. */
+  async getDeviceId(): Promise<string> {
+    if (!this.deviceId) {
+      this.deviceId = await getOrCreateDeviceId();
+    }
+    return this.deviceId;
+  }
+
   // Ensure token is restored before making requests
   private async ensureTokenRestored() {
     if (this.tokenRestorePromise) {
@@ -59,71 +115,42 @@ class ApiService {
   }
 
   async setAuthToken(token: string, refreshToken?: string) {
+    // Access token is in-memory ONLY — never written to disk.
+    // Session restoration uses the refresh token (stored by authStore in per-user authStorage).
     this.authToken = token;
 
-    // Persist access token to secure storage
-    if (token) {
-      try {
-        await secureStorage.setItem(AUTH_TOKEN_KEY, token);
-        console.log('[API_SERVICE] Access token saved to secure storage');
-      } catch (error) {
-        console.error('[API_SERVICE] Failed to save access token to storage:', error);
-      }
-    } else {
-      // Clear access token from storage
-      try {
-        await secureStorage.removeItem(AUTH_TOKEN_KEY);
-        console.log('[API_SERVICE] Access token removed from storage');
-      } catch (error) {
-        console.error('[API_SERVICE] Failed to remove access token from storage:', error);
-      }
-    }
-
-    // Persist refresh token if provided
+    // Keep refresh token in-memory for the 401 auto-refresh path.
+    // Persistence to per-user authStorage is handled by authStore, not here.
     if (refreshToken !== undefined) {
       this.refreshToken = refreshToken;
-      if (refreshToken) {
-        try {
-          await secureStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-          console.log('[API_SERVICE] Refresh token saved to secure storage');
-        } catch (error) {
-          console.error('[API_SERVICE] Failed to save refresh token to storage:', error);
-        }
-      } else {
-        // Clear refresh token from storage
-        try {
-          await secureStorage.removeItem(REFRESH_TOKEN_KEY);
-          console.log('[API_SERVICE] Refresh token removed from storage');
-        } catch (error) {
-          console.error('[API_SERVICE] Failed to remove refresh token from storage:', error);
-        }
-      }
     }
   }
 
+  /**
+   * Restores state from storage on app start.
+   *
+   * Access token: NOT restored — it is ephemeral (in-memory only).
+   * The authStore's initialize() will acquire a fresh access token via
+   * the refresh endpoint using the per-user stored refresh token.
+   *
+   * Refresh token: restored from the legacy flat key for backward
+   * compatibility. authStore.initialize() will migrate to per-user
+   * authStorage and then call setAuthToken() with the correct value.
+   *
+   * Last online time: restored for the offline grace period check.
+   */
   async restoreToken() {
     try {
-      console.log('[API_SERVICE] Restoring tokens from secure storage');
+      console.log('[API_SERVICE] Restoring session state from storage');
 
-      // Restore access token
-      const token = await secureStorage.getItem(AUTH_TOKEN_KEY);
-      if (token) {
-        this.authToken = token;
-        console.log('[API_SERVICE] Access token restored from storage', {
-          tokenLength: token.length,
-          tokenPrefix: token.substring(0, 20) + '...'
-        });
-      } else {
-        console.log('[API_SERVICE] No access token found in storage');
-      }
-
-      // Restore refresh token
+      // Legacy refresh token key — retained for backward compatibility.
+      // authStore.initialize() will take over and use per-user authStorage.
       const refreshToken = await secureStorage.getItem(REFRESH_TOKEN_KEY);
       if (refreshToken) {
         this.refreshToken = refreshToken;
-        console.log('[API_SERVICE] Refresh token restored from storage');
+        console.log('[API_SERVICE] Legacy refresh token restored');
       } else {
-        console.log('[API_SERVICE] No refresh token found in storage');
+        console.log('[API_SERVICE] No legacy refresh token found');
       }
 
       // Restore last online time
@@ -133,7 +160,7 @@ class ApiService {
         console.log('[API_SERVICE] Last online time restored:', this.lastOnlineTime);
       }
     } catch (error) {
-      console.error('[API_SERVICE] Failed to restore tokens from storage:', error);
+      console.error('[API_SERVICE] Failed to restore session state:', error);
     }
   }
 
@@ -218,8 +245,8 @@ class ApiService {
         if (this.isRefreshing) {
           // If already refreshing, wait for the new token
           return new Promise((resolve) => {
-            this.addRefreshSubscriber((token) => {
-              // Retry the request with the new token
+            this.addRefreshSubscriber((_token) => {
+              // Retry the request with the new token (already set in-memory by the refreshing path)
               resolve(
                 this.makeRequest<T>(endpoint, options, true)
               );
@@ -242,11 +269,15 @@ class ApiService {
 
           if (refreshResponse.success && refreshResponse.data?.accessToken) {
             const newAccessToken = refreshResponse.data.accessToken;
-            const newRefreshToken = refreshResponse.data.refreshToken; // Rotated refresh token
+            const newRefreshToken = refreshResponse.data.refreshToken;
+            const newOCT: string | undefined = refreshResponse.data.offlineCapabilityToken;
 
-            // Update both tokens (rotation)
+            // Update in-memory tokens only — authStore persists via callback.
             await this.setAuthToken(newAccessToken, newRefreshToken);
             this.isRefreshing = false;
+
+            // Notify authStore so it can persist the rotated refresh token.
+            this.tokenRefreshedCallback?.(newAccessToken, newRefreshToken, newOCT);
             this.onRefreshed(newAccessToken);
 
             // Retry original request
@@ -342,10 +373,16 @@ class ApiService {
     console.log('[API_SERVICE] Login request initiated');
 
     try {
+      const deviceId = await this.getDeviceId();
       const requestBody = { email, password, rememberMe };
       const response = await this.makeRequest('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify(requestBody),
+        headers: {
+          'x-device-id': deviceId,
+          'x-device-platform': Platform.OS,
+          'x-device-name': Platform.OS === 'ios' ? 'iOS Device' : Platform.OS === 'android' ? 'Android Device' : 'Web',
+        },
       });
 
       // Store both tokens after successful login
@@ -393,6 +430,34 @@ class ApiService {
   }
 
   /**
+   * Proactive background refresh — fires every 14 minutes.
+   * Only runs when online and when a refresh token is available.
+   * Failures are non-fatal: the next API request will trigger a 401 refresh.
+   */
+  private async proactiveRefresh(): Promise<void> {
+    try {
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isConnected) return;
+      if (!this.refreshToken) return;
+
+      console.log('[API_SERVICE] Proactive token refresh starting');
+      const response = await this.refreshTokenRequest();
+
+      if (response.success && response.data?.accessToken) {
+        const newAccessToken = response.data.accessToken;
+        const newRefreshToken = response.data.refreshToken;
+        const newOCT: string | undefined = response.data.offlineCapabilityToken;
+
+        await this.setAuthToken(newAccessToken, newRefreshToken);
+        this.tokenRefreshedCallback?.(newAccessToken, newRefreshToken, newOCT);
+        console.log('[API_SERVICE] Proactive refresh succeeded');
+      }
+    } catch (error) {
+      console.warn('[API_SERVICE] Proactive refresh failed (non-fatal):', error instanceof Error ? error.message : error);
+    }
+  }
+
+  /**
    * Internal refresh token request (used by makeRequest)
    * Uses raw fetch to avoid circular dependency
    */
@@ -402,8 +467,11 @@ class ApiService {
     }
 
     const url = `${this.baseUrl}/api/auth/refresh-token`;
+    const deviceId = await this.getDeviceId();
     const headers = {
       'Content-Type': 'application/json',
+      'x-device-id': deviceId,
+      'x-device-platform': Platform.OS,
     };
 
     console.log('[API_SERVICE] Calling refresh token endpoint');

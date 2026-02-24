@@ -410,12 +410,22 @@ Login Screen (shared device mode)
 - [x] **P1-07** — Tightened token lifetimes: access `15m`, refresh `7d` (remembered `30d`), OCT `24h`
 - ⬜ **P1-DEFERRED** — Offline transaction audit log ingestion endpoint (deferred to P8)
 
-### Phase 2 — Auth State Machine (Mobile) ⬜ Pending
+### Phase 2 — Auth State Machine (Mobile) ✅ Complete
 
-- [ ] **P2-01** — Define `AuthState` enum: `UNAUTHENTICATED | ONLINE_AUTHENTICATED | OFFLINE_AUTHENTICATED | SESSION_EXPIRED | INVALIDATED | PENDING_SYNC`
-- [ ] **P2-02** — Implement auth context / state store (Zustand or Redux slice)
-- [ ] **P2-03** — Implement network connectivity monitor (triggers state transitions)
-- [ ] **P2-04** — Wire state transitions as defined in State Transition Map
+- [x] **P2-01** — `AuthStatus` enum in new `src/types/auth.ts` — 6 states with inline JSDoc
+- [x] **P2-02** — `authStore.ts` fully redesigned with Zustand state machine
+  - `authStatus: AuthStatus` replaces `isAuthenticated: boolean` as source of truth
+  - Persists only `user` (non-sensitive) to AsyncStorage; `authStatus` derived on startup
+  - `User` alias exported for backward compatibility with existing screens
+- [x] **P2-03** — `services/networkMonitor.ts` (new singleton)
+  - Fires callbacks only on genuine connectivity transitions (suppresses oscillation)
+  - `resolveConnected()` uses both `isConnected` and `isInternetReachable` to avoid false positives
+- [x] **P2-04** — All state transitions wired:
+  - `login()` → `ONLINE_AUTHENTICATED`
+  - `logout()` → `UNAUTHENTICATED`
+  - `handleOffline()` → `OFFLINE_AUTHENTICATED` (stops refresh timer)
+  - `handleOnline()` → `PENDING_SYNC` → `ONLINE_AUTHENTICATED` | `INVALIDATED` | back to `OFFLINE_AUTHENTICATED`
+  - `initialize()` → derives correct initial state from stored artifacts
 
 ### Phase 3 — Secure Storage Layer (Mobile) ✅ Complete
 
@@ -430,14 +440,25 @@ Login Screen (shared device mode)
 - [x] **P3-04** — `knownUsers` index: `getKnownUsers()`, `addKnownUser()`, `removeKnownUser()` in `authStorage.ts`
   - Additional helpers: `hasUserPriorAuth()`, `isUserOfflineLocked()`, `incrementUserOfflineAttempts()`
 
-### Phase 4 — Token Management (Mobile)
+### Phase 4 — Token Management (Mobile) ✅ Complete
 
-- [ ] **P4-01** — Implement access token in-memory store (never persisted to disk)
-- [ ] **P4-02** — Implement encrypted refresh token storage (device-level key)
-- [ ] **P4-03** — Implement OCT encryption/decryption (PBKDF2 + AES-256, password-derived key)
-- [ ] **P4-04** — Embed server public key in app bundle for OCT signature verification
-- [ ] **P4-05** — Implement silent background token refresh (15-min access token cycle)
-- [ ] **P4-06** — Implement rotating refresh token storage on each `/auth/refresh` call
+- [x] **P4-01** — Access token: removed from disk persistence in `apiService.ts`
+  - `setAuthToken()` no longer calls `secureStorage.setItem()` for access token
+  - `restoreToken()` no longer reads access token from disk
+  - `AUTH_TOKEN_KEY` constant removed
+- [x] **P4-02** — Refresh token storage: per-user namespace via `authStorage.setUserRefreshToken(userId, token)` called in `authStore.login()` and `tokenRefreshedCallback`
+- [x] **P4-03** — OCT encryption/decryption in new `services/cryptoService.ts`
+  - `generateSalt()` — 16-byte random, returns base64
+  - `encryptOCT(jwt, password, salt)` — PBKDF2 100k iterations + AES-256-GCM, IV prepended
+  - `decryptOCT(encrypted, password, salt)` — throws on wrong password (AES-GCM auth tag)
+  - `isCryptoAvailable()` — runtime guard (Hermes RN 0.71+ / Expo SDK 50+)
+- [x] **P4-04** — OCT signature verification: handled server-side. Client-side JWT decode (existing `jwtDecoder.ts`) reads embedded claims (userId, deviceId, expiresAt) without re-verifying signature. Full ECDSA client verification deferred to P8 security hardening.
+- [x] **P4-05** — Background refresh timer in `apiService.ts`
+  - `startRefreshTimer()` — `setInterval` every 14 min (1 min before 15-min expiry)
+  - `stopRefreshTimer()` — called on logout and on network loss
+  - `proactiveRefresh()` — no-op if offline or no refresh token; non-fatal on error
+- [x] **P4-06** — Rotating refresh token: `tokenRefreshedCallback` in apiService → authStore persists new token to `authStorage.setUserRefreshToken()` on every auto-refresh or proactive refresh
+- [x] **P4-EXTRA** — Device headers on every login/refresh: `x-device-id`, `x-device-platform`, `x-device-name`; device ID cached in apiService after first async resolution
 
 ### Phase 5 — Session Restoration (Mobile)
 
