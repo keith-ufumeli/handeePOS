@@ -200,6 +200,36 @@ export async function hasUserPriorAuth(userId: string): Promise<boolean> {
   return lastOnline !== null;
 }
 
+// ─── Per-user display profile ──────────────────────────────────────────────────
+
+/**
+ * Minimal non-sensitive profile stored per user for the shared device user selector (P7-01).
+ * Stored alongside other per-user keys in Secure Store.
+ */
+export interface UserProfile {
+  email: string;
+  fullName: string;
+}
+
+/**
+ * Stores the display profile for a user (email + fullName).
+ * Called after a successful online login so the user selector can show
+ * human-readable identities without loading them from the server.
+ */
+export async function setUserProfile(userId: string, profile: UserProfile): Promise<void> {
+  await secureStorage.setItem(userKey(userId, 'profile'), JSON.stringify(profile));
+}
+
+export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+  const raw = await secureStorage.getItem(userKey(userId, 'profile'));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as UserProfile;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Session teardown ──────────────────────────────────────────────────────────
 
 /**
@@ -210,6 +240,6 @@ export async function hasUserPriorAuth(userId: string): Promise<boolean> {
  * is intended).
  */
 export async function clearUserSession(userId: string): Promise<void> {
-  const fields = ['refresh', 'oct', 'salt', 'attempts', 'lock_until', 'last_online'];
+  const fields = ['refresh', 'oct', 'salt', 'attempts', 'lock_until', 'last_online', 'profile'];
   await Promise.all(fields.map((field) => secureStorage.removeItem(userKey(userId, field))));
 }

@@ -37,6 +37,8 @@ import {
   setUserOfflineToken,
   setUserOfflineSalt,
   setUserLastOnlineAuth,
+  setUserProfile,
+  getUserProfile,
   clearUserSession,
   getUserRefreshToken,
   hasUserPriorAuth,
@@ -156,12 +158,21 @@ export const useAuthStore = create<AuthState>()(
       // ─── transitionTo ────────────────────────────────────────────────────────
 
       transitionTo(status, message = null) {
-        const { _sessionOCT } = get();
+        const { _sessionOCT, user } = get();
         const isAuthenticated = computeIsAuthenticated(status, _sessionOCT);
         console.log(
           `[AUTH_STORE] Transition → ${status} (isAuthenticated=${isAuthenticated})`,
           message ? `(${message})` : ''
         );
+
+        // P8-03: Wipe all per-user Secure Store data on server-side revocation.
+        // Fire-and-forget — UI transition must not block on storage I/O.
+        if (status === AuthStatus.INVALIDATED && user?.userId) {
+          clearUserSession(user.userId).catch((err) =>
+            console.warn('[AUTH_STORE] Failed to clear session on INVALIDATED:', err)
+          );
+        }
+
         set({ authStatus: status, isAuthenticated, statusMessage: message, isLoading: false });
       },
 
@@ -214,6 +225,10 @@ export const useAuthStore = create<AuthState>()(
 
           // ── 2. Store tokens in per-user authStorage (Secure Store) ────────────
           await addKnownUser(mappedUser.userId);
+          await setUserProfile(mappedUser.userId, {
+            email: mappedUser.email,
+            fullName: mappedUser.fullName,
+          });
           await setUserRefreshToken(mappedUser.userId, refreshToken);
           await setUserLastOnlineAuth(mappedUser.userId, new Date().toISOString());
           await resetUserOfflineAttempts(mappedUser.userId);
@@ -389,10 +404,40 @@ export const useAuthStore = create<AuthState>()(
           await resetUserOfflineAttempts(userId);
           await clearUserOfflineLock(userId);
 
+          // P7-05: Warn if OCT expires in less than 2 hours.
+          let expiryWarning: string | null = null;
+          if (octPayload.exp !== undefined) {
+            const twoHoursFromNow = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
+            if (octPayload.exp < twoHoursFromNow) {
+              expiryWarning =
+                'Your offline session expires in less than 2 hours. Connect to extend it.';
+            }
+          }
+
+          // If a different user was selected via the shared device picker,
+          // update the store's `user` so downstream code (including P8-03
+          // clearUserSession in transitionTo) operates on the correct userId.
+          const currentUser = get().user;
+          if (!currentUser || currentUser.userId !== userId) {
+            const profile = await getUserProfile(userId);
+            if (profile) {
+              set({
+                user: {
+                  userId,
+                  email: profile.email,
+                  fullName: profile.fullName,
+                  role: octPayload.role ?? currentUser?.role ?? '',
+                  storeId: octPayload.storeId ?? currentUser?.storeId ?? '',
+                  permissions: octPayload.permissions ?? currentUser?.permissions ?? [],
+                },
+              });
+            }
+          }
+
           // Place decrypted OCT in memory — this makes isAuthenticated true when
           // transitionTo(OFFLINE_AUTHENTICATED) is called below.
           set({ _sessionOCT: decryptedOCT });
-          get().transitionTo(AuthStatus.OFFLINE_AUTHENTICATED, null);
+          get().transitionTo(AuthStatus.OFFLINE_AUTHENTICATED, expiryWarning);
 
           console.log('[AUTH_STORE] Offline login successful for userId:', userId);
         } catch (error) {
@@ -517,6 +562,7 @@ export const useAuthStore = create<AuthState>()(
             get().transitionTo(
               AuthStatus.INVALIDATED,
               'Your account access has changed. Please sign in again or contact your manager.'
+              // Note: "detected on reconnect" variant per UX spec (vs. online detection below)
             );
           } else {
             // Network error — stay offline, try again on next reconnect
@@ -590,7 +636,11 @@ export const useAuthStore = create<AuthState>()(
             const msg = error instanceof Error ? error.message : String(error);
             const is401 = msg.includes('401') || msg.toLowerCase().includes('unauthorized');
             if (is401) {
-              set({ authStatus: AuthStatus.INVALIDATED, isAuthenticated: false, isLoading: false });
+              // Route through transitionTo so P8-03 clearUserSession fires
+              get().transitionTo(
+                AuthStatus.INVALIDATED,
+                'Your account access has been disabled. Please speak with your manager.'
+              );
             } else {
               // Network error during init — fall to offline path
               const hasPrior = await hasUserPriorAuth(user.userId);

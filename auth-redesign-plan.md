@@ -460,35 +460,62 @@ Login Screen (shared device mode)
 - [x] **P4-06** — Rotating refresh token: `tokenRefreshedCallback` in apiService → authStore persists new token to `authStorage.setUserRefreshToken()` on every auto-refresh or proactive refresh
 - [x] **P4-EXTRA** — Device headers on every login/refresh: `x-device-id`, `x-device-platform`, `x-device-name`; device ID cached in apiService after first async resolution
 
-### Phase 5 — Session Restoration (Mobile)
+### Phase 5 — Session Restoration (Mobile) ✅ Complete
 
-- [ ] **P5-01** — Implement app launch session restoration flow (online path)
-- [ ] **P5-02** — Implement app launch session restoration flow (offline path)
-- [ ] **P5-03** — Implement `PENDING_SYNC` flow (reconnect validation)
-- [ ] **P5-04** — Suppress login screen when session is restorable
+- [x] **P5-01** — App launch session restoration flow (online path)
+  - `authStore.initialize()` — reads stored refresh token, calls `/auth/refresh-token`, transitions to `ONLINE_AUTHENTICATED`
+- [x] **P5-02** — App launch session restoration flow (offline path)
+  - `authStore.initialize()` — calls `hasUserPriorAuth()`, transitions to `OFFLINE_AUTHENTICATED` (awaiting offline login password)
+- [x] **P5-03** — `PENDING_SYNC` flow (reconnect validation)
+  - `authStore.handleOnline()` — transitions `OFFLINE_AUTHENTICATED → PENDING_SYNC`, validates via `/auth/refresh-token`, resolves to `ONLINE_AUTHENTICATED` or `INVALIDATED`
+- [x] **P5-04** — Login screen suppressed when session is restorable
+  - `app/index.tsx` — routes based on `authStatus`; spinner during `PENDING_SYNC`
 
-### Phase 6 — Offline Login Flow (Mobile)
+### Phase 6 — Offline Login Flow (Mobile) ✅ Complete
 
-- [ ] **P6-01** — Implement offline login eligibility check (prior auth exists, not locked)
-- [ ] **P6-02** — Implement attempt counter and exponential backoff lockout
-- [ ] **P6-03** — Implement OCT decryption and signature verification on offline login
-- [ ] **P6-04** — Implement device binding check (`deviceId` in OCT vs current device)
-- [ ] **P6-05** — Implement OCT TTL check (server-embedded timestamps)
-- [ ] **P6-06** — Implement attempt counter reset on successful offline login
+- [x] **P6-01** — Offline login eligibility check (prior auth exists, not locked)
+  - `authStore.offlineLogin()` step 1–2 — checks `isUserOfflineLocked()` and `getUserOfflineAttempts()`
+- [x] **P6-02** — Attempt counter and exponential backoff lockout
+  - Attempt 3 → 30s lockout; attempt 4 → 2min lockout; attempt 5 → `SESSION_EXPIRED`
+- [x] **P6-03** — OCT decryption on offline login
+  - `cryptoService.decryptOCT()` called with PBKDF2-derived key; AES-GCM auth-tag validates password
+- [x] **P6-04** — Device binding check (`deviceId` in OCT vs current device)
+  - `authStore.offlineLogin()` step 5b — compares `octPayload.deviceId` with `getOrCreateDeviceId()`
+- [x] **P6-05** — OCT TTL check (server-embedded timestamps)
+  - `authStore.offlineLogin()` step 5a — validates `octPayload.exp` against current time
+- [x] **P6-06** — Attempt counter reset on successful offline login
+  - `resetUserOfflineAttempts()` + `clearUserOfflineLock()` called on success
 
-### Phase 7 — UX & Messaging (Mobile)
+### Phase 7 — UX & Messaging (Mobile) ✅ Complete
 
-- [ ] **P7-01** — Implement shared device user selector on login screen
-- [ ] **P7-02** — Implement all UX message scenarios from the messaging reference table
-- [ ] **P7-03** — Implement "Verifying your session..." indicator for `PENDING_SYNC`
-- [ ] **P7-04** — Implement non-blocking "You're back online" toast
-- [ ] **P7-05** — Implement offline session expiry warning (< 2 hours remaining)
+- [x] **P7-01** — Shared device user selector on login screen
+  - `authStorage.setUserProfile()` / `getUserProfile()` store per-user email+fullName on login
+  - `login.tsx` loads all known users on mount, shows picker modal when multiple users exist
+  - Selected user's identity passed to `offlineLogin()`
+- [x] **P7-02** — UX message scenarios from messaging reference table
+  - UNAUTHENTICATED + offline: `WelcomeScreen` — "Please connect to the internet to continue"
+  - Offline mode header: "You're offline. Enter your password to access your saved session."
+  - Wrong password messages with remaining attempt counts: set in `authStore.offlineLogin()`
+  - INVALIDATED (online detection): "Your account access has been disabled. Please speak with your manager."
+  - INVALIDATED (on reconnect): "Your account access has changed. Please sign in again or contact your manager."
+  - New user on shared device offline: "This device hasn't been set up for your account yet. Please sign in online first."
+  - SESSION_EXPIRED / expiry warnings: wired through `statusMessage` → `contextBanner` in `login.tsx`
+- [x] **P7-03** — "Verifying your session..." indicator for `PENDING_SYNC`
+  - `app/index.tsx` — spinner + statusMessage shown during `PENDING_SYNC`
+- [x] **P7-04** — Non-blocking "You're back online" toast
+  - `src/components/AuthToast.tsx` — detects `PENDING_SYNC → ONLINE_AUTHENTICATED` transition, shows 3s toast
+  - Mounted in `app/_layout.tsx` alongside `SyncStatusProvider`
+- [x] **P7-05** — Offline session expiry warning (< 2 hours remaining)
+  - `authStore.offlineLogin()` success block — checks `octPayload.exp`; if within 2h, sets `statusMessage` on `OFFLINE_AUTHENTICATED` transition
 
 ### Phase 8 — Security Hardening
 
-- [ ] **P8-01** — Enforce max 5 offline login attempts → `SESSION_EXPIRED`
-- [ ] **P8-02** — Validate all OCT fields (signature, deviceId, expiry) before granting offline access
-- [ ] **P8-03** — Clear all session data on `INVALIDATED` state
+- [x] **P8-01** — Max 5 offline login attempts → `SESSION_EXPIRED`
+  - Enforced in `authStore.offlineLogin()`; 5th failure transitions to `SESSION_EXPIRED`
+- [ ] **P8-02** — Full OCT field validation (ECDSA signature, deviceId, expiry)
+  - expiry + deviceId: ✅ done; ECDSA client-side signature verification: ⬜ deferred (requires embedded server public key — see P4-04 note)
+- [x] **P8-03** — Clear all session data on `INVALIDATED` state
+  - `authStore.transitionTo()` — fires `clearUserSession(userId)` on INVALIDATED transition
 - [ ] **P8-04** — Audit trail: tag offline-session transactions with session metadata
 - [ ] **P8-05** — Reconcile offline transactions with server on reconnect
 

@@ -1,16 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View,
+  FlatList,
+  Modal,
+} from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '../../components/themed-view';
 import { ThemedText } from '../../components/themed-text';
 import { useAuthStore } from '../../src/stores/authStore';
 import { AuthStatus } from '../../src/types/auth';
+import {
+  getKnownUsers,
+  getUserProfile,
+  type UserProfile,
+} from '../../src/services/authStorage';
+
+interface KnownUser {
+  userId: string;
+  profile: UserProfile;
+}
 
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+
+  // P7-01: Shared device user selector state
+  const [knownUsers, setKnownUsers] = useState<KnownUser[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [showUserPicker, setShowUserPicker] = useState(false);
+  const [loadingKnownUsers, setLoadingKnownUsers] = useState(true);
 
   const {
     login,
@@ -31,8 +55,37 @@ export default function LoginScreen() {
     }
   }, [isAuthenticated, router]);
 
+  // P7-01: Load known users with their profiles for the shared device selector
+  useEffect(() => {
+    let cancelled = false;
+    async function loadKnownUsers() {
+      try {
+        const ids = await getKnownUsers();
+        const users: KnownUser[] = [];
+        for (const id of ids) {
+          const profile = await getUserProfile(id);
+          if (profile) users.push({ userId: id, profile });
+        }
+        if (!cancelled) setKnownUsers(users);
+      } catch {
+        // Non-fatal — fall back to standard login form
+      } finally {
+        if (!cancelled) setLoadingKnownUsers(false);
+      }
+    }
+    loadKnownUsers();
+    return () => { cancelled = true; };
+  }, []);
+
+  // When a known user is selected in offline mode, keep their userId tracked
+  const handleSelectUser = (ku: KnownUser) => {
+    setSelectedUserId(ku.userId);
+    setShowUserPicker(false);
+    clearError();
+    setPassword('');
+  };
+
   // Offline mode: app started offline, user has prior session on this device.
-  // Show password-only form — email is pre-filled from the stored user profile.
   const isOfflineMode = authStatus === AuthStatus.OFFLINE_AUTHENTICATED;
 
   const handleOnlineLogin = async () => {
@@ -44,16 +97,40 @@ export default function LoginScreen() {
   };
 
   const handleOfflineLogin = async () => {
-    if (!user?.userId) return;
+    // Use explicitly selected user (picker) or fall back to the persisted user
+    const targetUserId = selectedUserId ?? user?.userId;
+    if (!targetUserId) return;
     try {
-      await offlineLogin(user.userId, password);
+      await offlineLogin(targetUserId, password);
     } catch (err) {
       console.error('[LOGIN_SCREEN] Offline login error:', err instanceof Error ? err.message : String(err));
     }
   };
 
+  // Resolve display identity for the offline form header
+  const offlineUser: { email: string; fullName: string } | null =
+    selectedUserId
+      ? knownUsers.find((ku) => ku.userId === selectedUserId)?.profile ?? null
+      : user
+      ? { email: user.email, fullName: user.fullName }
+      : null;
+
   // ── Offline login UI ──────────────────────────────────────────────────────────
   if (isOfflineMode) {
+    // P7-02: "This device hasn't been set up for your account yet" — shown when
+    // there are no known users at all (no prior auth on this device).
+    if (!loadingKnownUsers && knownUsers.length === 0 && !user) {
+      return (
+        <ThemedView style={styles.container}>
+          <ThemedText type="title" style={styles.title}>Offline Sign In</ThemedText>
+          <ThemedText style={styles.offlineInfo}>
+            This device hasn&apos;t been set up for your account yet.
+            Please sign in online first.
+          </ThemedText>
+        </ThemedView>
+      );
+    }
+
     return (
       <ThemedView style={styles.container}>
         <ThemedText type="title" style={styles.title}>
@@ -61,17 +138,32 @@ export default function LoginScreen() {
         </ThemedText>
 
         <ThemedText style={styles.offlineInfo}>
-          You&apos;re offline. Enter your password to continue working.
+          You&apos;re offline. Enter your password to access your saved session.
         </ThemedText>
 
         {statusMessage ? (
           <ThemedText style={styles.statusMessage}>{statusMessage}</ThemedText>
         ) : null}
 
-        {/* Pre-filled user identity — read-only */}
-        <View style={[styles.input, styles.readonlyInput]}>
-          <ThemedText style={styles.readonlyText}>{user?.email ?? ''}</ThemedText>
-        </View>
+        {/* P7-01: User selector — shown when multiple known users exist */}
+        {!loadingKnownUsers && knownUsers.length > 1 ? (
+          <TouchableOpacity
+            style={[styles.input, styles.userSelectorButton]}
+            onPress={() => setShowUserPicker(true)}
+          >
+            <ThemedText style={styles.userSelectorText}>
+              {offlineUser?.email ?? 'Select account...'}
+            </ThemedText>
+            <Ionicons name="chevron-down" size={16} color="#555" />
+          </TouchableOpacity>
+        ) : (
+          /* Single known user — read-only identity display */
+          <View style={[styles.input, styles.readonlyInput]}>
+            <ThemedText style={styles.readonlyText}>
+              {offlineUser?.email ?? user?.email ?? ''}
+            </ThemedText>
+          </View>
+        )}
 
         {error ? (
           <ThemedText style={styles.error}>{error}</ThemedText>
@@ -86,13 +178,13 @@ export default function LoginScreen() {
             setPassword(v);
           }}
           secureTextEntry
-          autoFocus
+          autoFocus={knownUsers.length <= 1}
         />
 
         <TouchableOpacity
           style={styles.button}
           onPress={handleOfflineLogin}
-          disabled={isLoading || !password}
+          disabled={isLoading || !password || (!selectedUserId && !user?.userId)}
         >
           <ThemedText style={styles.buttonText}>
             {isLoading ? 'Verifying...' : 'Continue Offline'}
@@ -103,6 +195,50 @@ export default function LoginScreen() {
           Offline access is limited to previously cached data.
           Connect to the internet to sync the latest changes.
         </ThemedText>
+
+        {/* P7-01: User picker modal */}
+        <Modal
+          visible={showUserPicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowUserPicker(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowUserPicker(false)}
+          >
+            <View style={styles.modalCard}>
+              <ThemedText type="defaultSemiBold" style={styles.modalTitle}>
+                Select Account
+              </ThemedText>
+              <FlatList
+                data={knownUsers}
+                keyExtractor={(item) => item.userId}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.userRow}
+                    onPress={() => handleSelectUser(item)}
+                  >
+                    <View style={styles.userAvatar}>
+                      <ThemedText style={styles.userAvatarText}>
+                        {item.profile.fullName.charAt(0).toUpperCase()}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.userInfo}>
+                      <ThemedText type="defaultSemiBold">{item.profile.fullName}</ThemedText>
+                      <ThemedText style={styles.userEmail}>{item.profile.email}</ThemedText>
+                    </View>
+                    {selectedUserId === item.userId && (
+                      <Ionicons name="checkmark-circle" size={20} color="#0a7ea4" />
+                    )}
+                  </TouchableOpacity>
+                )}
+                ItemSeparatorComponent={() => <View style={styles.separator} />}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </ThemedView>
     );
   }
@@ -232,6 +368,14 @@ const styles = StyleSheet.create({
   readonlyText: {
     color: '#555',
   },
+  userSelectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  userSelectorText: {
+    color: '#333',
+  },
   button: {
     backgroundColor: '#0a7ea4',
     height: 50,
@@ -274,5 +418,55 @@ const styles = StyleSheet.create({
   registerLink: {
     marginTop: 20,
     textAlign: 'center',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    maxHeight: 400,
+  },
+  modalTitle: {
+    marginBottom: 16,
+    fontSize: 16,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
+  },
+  userAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#0a7ea4',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userAvatarText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userEmail: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
   },
 });

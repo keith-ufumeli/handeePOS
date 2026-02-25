@@ -6,6 +6,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '../hooks/use-color-scheme';
 import SyncStatusProvider from '../src/components/SyncStatusProvider';
+import AuthToast from '../src/components/AuthToast';
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -32,6 +33,7 @@ export default function RootLayout() {
           <Stack.Screen name="products/new" options={{ title: 'New Product' }} />
           <Stack.Screen name="receipt/[orderId]" options={{ title: 'Receipt' }} />
         </Stack>
+        <AuthToast />
         <StatusBar style="auto" />
       </SyncStatusProvider>
     </ThemeProvider>
