@@ -53,7 +53,7 @@ import {
   incrementUserOfflineAttempts,
   clearUserOfflineLock,
 } from '../services/authStorage';
-import { generateSalt, encryptOCT, decryptOCT, isCryptoAvailable } from '../services/cryptoService';
+import { generateSalt, encryptOCT, decryptOCT, isCryptoAvailable, verifyOCTSignature } from '../services/cryptoService';
 import networkMonitor from '../services/networkMonitor';
 
 // ─── Backward-compatible alias ─────────────────────────────────────────────────
@@ -398,6 +398,19 @@ export const useAuthStore = create<AuthState>()(
               );
               return;
             }
+          }
+
+          // ── 5c. P8-02: ECDSA signature verification ───────────────────────────
+          // Verifies the OCT was issued by our server using the embedded public key.
+          // Returns true when no key is embedded (soft pass — backward compat).
+          const sigValid = await verifyOCTSignature(decryptedOCT);
+          if (!sigValid) {
+            console.error('[AUTH_STORE] OCT signature invalid — token tampered or wrong key');
+            get().transitionTo(
+              AuthStatus.INVALIDATED,
+              'Session token is invalid. Please sign in again.'
+            );
+            return;
           }
 
           // ── 6. Success ────────────────────────────────────────────────────────

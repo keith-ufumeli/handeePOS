@@ -51,6 +51,21 @@ class AuthService {
   private readonly OFFLINE_GRACE_PERIOD_DAYS = 7;
 
   /**
+   * P8-02: ECDSA private key (PEM) for signing Offline Capability Tokens.
+   *
+   * When set, OCTs are signed with ES256 (ECDSA P-256) instead of HS256.
+   * The corresponding public key (OCT_EC_PUBLIC_KEY_PEM) must be embedded in
+   * the mobile app so it can verify OCT signatures client-side without a server call.
+   *
+   * Generate a keypair with: npx ts-node scripts/generate-oct-keys.ts
+   * Then set OCT_EC_PRIVATE_KEY_PEM and OCT_EC_PUBLIC_KEY_PEM in your .env file.
+   *
+   * Backward compat: if not set, OCTs fall back to HS256 with JWT_DEVICE_SECRET.
+   */
+  private readonly OCT_EC_PRIVATE_KEY_PEM = process.env['OCT_EC_PRIVATE_KEY_PEM'];
+  private readonly OCT_EC_PUBLIC_KEY_PEM = process.env['OCT_EC_PUBLIC_KEY_PEM'];
+
+  /**
    * Hash password using bcrypt
    */
   async hashPassword(password: string): Promise<string> {
@@ -514,8 +529,14 @@ class AuthService {
    * treat a missing OCT as "offline login unavailable on this device".
    */
   generateOfflineCapabilityToken(payload: TokenPayload, deviceId: string): string {
-    if (!this.JWT_DEVICE_SECRET) {
-      throw new Error('JWT_DEVICE_SECRET is not configured — OCT cannot be issued');
+    // P8-02: Use ECDSA (ES256) when EC private key is configured; fall back to HMAC (HS256).
+    const useECDSA = Boolean(this.OCT_EC_PRIVATE_KEY_PEM);
+    const signingKey = useECDSA ? this.OCT_EC_PRIVATE_KEY_PEM! : this.JWT_DEVICE_SECRET;
+
+    if (!signingKey) {
+      throw new Error(
+        'OCT signing key is not configured. Set OCT_EC_PRIVATE_KEY_PEM (recommended) or JWT_DEVICE_SECRET.'
+      );
     }
 
     const permissionsHash = crypto
@@ -534,9 +555,14 @@ class AuthService {
       octVersion: '1',
     };
 
-    logger.info('[AUTH_SERVICE] Generating OCT', { userId: payload.userId, deviceId });
+    logger.info('[AUTH_SERVICE] Generating OCT', {
+      userId: payload.userId,
+      deviceId,
+      algorithm: useECDSA ? 'ES256' : 'HS256',
+    });
 
-    return jwt.sign(octPayload, this.JWT_DEVICE_SECRET, {
+    return jwt.sign(octPayload, signingKey, {
+      algorithm: useECDSA ? 'ES256' : 'HS256',
       expiresIn: this.OCT_EXPIRES_IN,
       issuer: 'handeepos-api',
       audience: 'handeepos-mobile',
@@ -546,13 +572,21 @@ class AuthService {
   /**
    * Verify an Offline Capability Token (OCT).
    * Used by the session/validate endpoint and the PENDING_SYNC flow.
+   *
+   * P8-02: Accepts both ES256 (ECDSA) and HS256 (HMAC) signed tokens.
+   * Prefers the EC public key when configured.
    */
   verifyOfflineCapabilityToken(token: string): OctPayload {
-    if (!this.JWT_DEVICE_SECRET) {
-      throw new Error('JWT_DEVICE_SECRET is not configured');
+    const useECDSA = Boolean(this.OCT_EC_PUBLIC_KEY_PEM);
+    const verifyKey = useECDSA ? this.OCT_EC_PUBLIC_KEY_PEM! : this.JWT_DEVICE_SECRET;
+
+    if (!verifyKey) {
+      throw new Error('OCT verification key is not configured.');
     }
+
     try {
-      return jwt.verify(token, this.JWT_DEVICE_SECRET, {
+      return jwt.verify(token, verifyKey, {
+        algorithms: useECDSA ? ['ES256'] : ['HS256'],
         issuer: 'handeepos-api',
         audience: 'handeepos-mobile',
       }) as OctPayload;
