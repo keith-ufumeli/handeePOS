@@ -202,16 +202,24 @@ class AuthService {
 
   /**
    * Verify refresh token
+   * Returns only application claims (TokenPayload). JWT reserved claims (exp, iat, iss, aud)
+   * are stripped so the payload can be safely passed to jwt.sign() with options.expiresIn.
    */
   verifyRefreshToken(token: string): TokenPayload {
     logger.info('[AUTH_SERVICE] Verifying refresh token');
     try {
-      const decoded = jwt.verify(token, this.JWT_REFRESH_SECRET) as TokenPayload;
+      const decoded = jwt.verify(token, this.JWT_REFRESH_SECRET) as TokenPayload & { exp?: number; iat?: number; iss?: string; aud?: string };
       logger.info('[AUTH_SERVICE] Refresh token verified successfully', {
         userId: decoded.userId,
         email: decoded.email
       });
-      return decoded;
+      return {
+        userId: decoded.userId,
+        email: decoded.email,
+        role: decoded.role,
+        storeId: decoded.storeId,
+        permissions: decoded.permissions,
+      };
     } catch (error) {
       logger.error('[AUTH_SERVICE] Refresh token verification failed:', {
         error: error instanceof Error ? error.message : String(error),
