@@ -1,7 +1,7 @@
 import { eq, and, or, like, gte, lte, lt, desc, asc, sql } from 'drizzle-orm';
 import { getDatabase, generateId } from './index';
-import { products, categories, orders, syncQueue } from './schema';
-import { Product, Category, Order, SyncQueueItem, productFromDb, categoryFromDb, orderFromDb, syncQueueFromDb } from './types';
+import { products, categories, orders, customers, syncQueue } from './schema';
+import { Product, Category, Order, LocalCustomer, SyncQueueItem, productFromDb, categoryFromDb, orderFromDb, customerFromDb, syncQueueFromDb } from './types';
 
 // Products helpers
 export async function getAllProducts(filters?: {
@@ -193,6 +193,169 @@ export async function getCategoryById(id: string): Promise<Category | null> {
   const db = await getDatabase();
   const result = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
   return result.length > 0 ? categoryFromDb(result[0]) : null;
+}
+
+// Customers helpers
+export async function getAllCustomers(filters?: { search?: string }): Promise<LocalCustomer[]> {
+  const db = await getDatabase();
+  const conditions = [eq(customers.isActive, true)];
+  if (filters?.search?.trim()) {
+    conditions.push(
+      or(
+        like(customers.name, `%${filters.search}%`),
+        like(customers.email ?? sql`''`, `%${filters.search}%`),
+        like(customers.phoneNumber ?? sql`''`, `%${filters.search}%`)
+      )!
+    );
+  }
+  const whereClause = conditions.length > 1 ? and(...conditions) : conditions[0];
+  const results = await db.select().from(customers).where(whereClause).orderBy(asc(customers.name));
+  return results.map((r: any) => customerFromDb(r));
+}
+
+export async function getCustomerById(id: string): Promise<LocalCustomer | null> {
+  const db = await getDatabase();
+  const result = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
+  return result.length > 0 ? customerFromDb(result[0] as any) : null;
+}
+
+export async function getCustomerByServerId(serverId: string): Promise<LocalCustomer | null> {
+  const db = await getDatabase();
+  const result = await db.select().from(customers).where(eq(customers.serverId, serverId)).limit(1);
+  return result.length > 0 ? customerFromDb(result[0] as any) : null;
+}
+
+export async function createCustomer(data: {
+  name: string;
+  email?: string;
+  phoneNumber?: string;
+  address?: string;
+  notes?: string;
+}): Promise<LocalCustomer> {
+  const db = await getDatabase();
+  const id = await generateId();
+  const now = Date.now();
+  await db.insert(customers).values({
+    id,
+    name: data.name,
+    email: data.email ?? null,
+    phoneNumber: data.phoneNumber ?? null,
+    address: data.address ?? null,
+    notes: data.notes ?? null,
+    totalSpent: 0,
+    totalOrders: 0,
+    loyaltyPoints: 0,
+    tier: 'bronze',
+    isActive: true,
+    syncStatus: 'pending',
+    createdAt: new Date(now),
+    updatedAt: new Date(now),
+  });
+  const customer = await getCustomerById(id);
+  if (!customer) throw new Error('Failed to create customer');
+  return customer;
+}
+
+export async function updateCustomer(id: string, data: Partial<{
+  name: string;
+  email: string;
+  phoneNumber: string;
+  address: string;
+  notes: string;
+}>): Promise<LocalCustomer> {
+  const db = await getDatabase();
+  const updateData: any = { updatedAt: new Date(), syncStatus: 'pending' };
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.email !== undefined) updateData.email = data.email ?? null;
+  if (data.phoneNumber !== undefined) updateData.phoneNumber = data.phoneNumber ?? null;
+  if (data.address !== undefined) updateData.address = data.address ?? null;
+  if (data.notes !== undefined) updateData.notes = data.notes ?? null;
+  await db.update(customers).set(updateData).where(eq(customers.id, id));
+  const customer = await getCustomerById(id);
+  if (!customer) throw new Error('Failed to update customer');
+  return customer;
+}
+
+export async function deleteCustomer(id: string): Promise<void> {
+  const db = await getDatabase();
+  await db.update(customers).set({ isActive: false, syncStatus: 'pending', updatedAt: new Date() }).where(eq(customers.id, id));
+}
+
+export async function upsertCustomersFromServer(serverCustomers: Array<{
+  _id: string;
+  name: string;
+  email?: string;
+  phoneNumber?: string;
+  address?: { street?: string; city?: string; country?: string; postalCode?: string };
+  totalSpent?: number;
+  totalOrders?: number;
+  lastVisit?: string | Date;
+  notes?: string;
+  loyaltyPoints?: number;
+  tier?: string;
+  isActive?: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}>): Promise<void> {
+  const db = await getDatabase();
+  for (const c of serverCustomers) {
+    const serverId = String(c._id);
+    const existing = await getCustomerByServerId(serverId);
+    const addressStr = c.address ? JSON.stringify(c.address) : null;
+    const now = Date.now();
+    if (existing) {
+      await db.update(customers).set({
+        name: c.name,
+        email: c.email ?? null,
+        phoneNumber: c.phoneNumber ?? null,
+        address: addressStr,
+        totalSpent: c.totalSpent ?? 0,
+        totalOrders: c.totalOrders ?? 0,
+        lastVisit: c.lastVisit ? new Date(c.lastVisit) : null,
+        notes: c.notes ?? null,
+        loyaltyPoints: c.loyaltyPoints ?? 0,
+        tier: (c.tier as any) ?? 'bronze',
+        isActive: c.isActive !== false,
+        syncStatus: 'synced',
+        lastSyncedAt: now,
+        updatedAt: new Date(now),
+      }).where(eq(customers.id, existing.id));
+    } else {
+      const id = await generateId();
+      await db.insert(customers).values({
+        id,
+        name: c.name,
+        email: c.email ?? null,
+        phoneNumber: c.phoneNumber ?? null,
+        address: addressStr,
+        totalSpent: c.totalSpent ?? 0,
+        totalOrders: c.totalOrders ?? 0,
+        lastVisit: c.lastVisit ? new Date(c.lastVisit) : null,
+        notes: c.notes ?? null,
+        loyaltyPoints: c.loyaltyPoints ?? 0,
+        tier: (c.tier as any) ?? 'bronze',
+        isActive: c.isActive !== false,
+        syncStatus: 'synced',
+        lastSyncedAt: now,
+        serverId,
+        createdAt: new Date(now),
+        updatedAt: new Date(now),
+      });
+    }
+  }
+}
+
+export async function updateCustomerSyncResult(
+  localCustomerId: string,
+  result: { serverId: string; syncStatus?: string; lastSyncedAt?: number }
+): Promise<void> {
+  const db = await getDatabase();
+  await db.update(customers).set({
+    serverId: result.serverId,
+    syncStatus: result.syncStatus ?? 'synced',
+    lastSyncedAt: result.lastSyncedAt ?? Date.now(),
+    updatedAt: new Date(),
+  }).where(eq(customers.id, localCustomerId));
 }
 
 // Orders helpers

@@ -1,7 +1,7 @@
 import * as dbHelpers from '../database/db-helpers';
 import { SyncOperation, SyncQueueItem } from '../database/types';
 import { getDatabase, generateId } from '../database';
-import { products, categories, syncQueue } from '../database/schema';
+import { products, categories, customers, syncQueue } from '../database/schema';
 import { eq } from 'drizzle-orm';
 import apiService, { ApiResponse } from './apiService';
 import { getOrCreateDeviceId } from '../utils/deviceId';
@@ -108,6 +108,9 @@ class SyncService {
         break;
       case 'orders':
         await this.syncOrder(item.operation, data, item.documentId);
+        break;
+      case 'customers':
+        await this.syncCustomer(item.operation, data, item.documentId);
         break;
       default:
         throw new Error(`Unknown collection: ${item.collection}`);
@@ -263,6 +266,59 @@ class SyncService {
         break;
       case 'delete':
         await apiService.delete(`/api/orders/${data.serverId || data.id}`);
+        break;
+    }
+  }
+
+  /**
+   * Sync customer to server
+   */
+  private async syncCustomer(operation: SyncOperation, data: any, documentId: string): Promise<void> {
+    const db = await getDatabase();
+    let serverId = data.serverId || data._id;
+
+    if (operation !== 'create') {
+      const rows = await db.select().from(customers).where(eq(customers.id, documentId)).limit(1);
+      if (rows.length > 0 && rows[0].serverId) {
+        serverId = rows[0].serverId;
+      }
+    }
+
+    switch (operation) {
+      case 'create': {
+        const payload = {
+          name: data.name,
+          email: data.email,
+          phoneNumber: data.phoneNumber,
+          address: data.address,
+          notes: data.notes,
+        };
+        const response = await apiService.post<{ data?: { _id?: string }; _id?: string }>('/api/customers', payload);
+        const res = response?.data ?? response;
+        const newServerId = res?._id ?? (res as any)?.id;
+        if (newServerId) {
+          await dbHelpers.updateCustomerSyncResult(documentId, {
+            serverId: String(newServerId),
+            syncStatus: 'synced',
+            lastSyncedAt: Date.now(),
+          });
+        }
+        break;
+      }
+      case 'update':
+        if (!serverId) throw new Error('Cannot update customer: Missing serverId');
+        await apiService.put(`/api/customers/${serverId}`, {
+          name: data.name,
+          email: data.email,
+          phoneNumber: data.phoneNumber,
+          address: data.address,
+          notes: data.notes,
+        });
+        await db.update(customers).set({ syncStatus: 'synced', lastSyncedAt: Date.now(), updatedAt: new Date() }).where(eq(customers.id, documentId));
+        break;
+      case 'delete':
+        if (!serverId) return;
+        await apiService.delete(`/api/customers/${serverId}`);
         break;
     }
   }
@@ -427,6 +483,22 @@ class SyncService {
 
       // Don't throw - allow sync to continue even if pull fails
     }
+
+    // Pull customers
+    try {
+      console.log('[SYNC_SERVICE] Fetching customers from server...');
+      const customersResponse = await apiService.get<ApiResponse<{ customers?: any[] }>>('/api/customers?limit=1000');
+      if (customersResponse.success && customersResponse.data) {
+        const list = customersResponse.data.customers ?? (Array.isArray(customersResponse.data) ? customersResponse.data : []);
+        if (list.length > 0) {
+          await dbHelpers.upsertCustomersFromServer(list);
+          console.log('[SYNC_SERVICE] Customers updated successfully:', list.length);
+        }
+      }
+    } catch (error) {
+      console.error('[SYNC_SERVICE] Error fetching customers:', error instanceof Error ? error.message : String(error));
+    }
+
     return serverTimestamp;
   }
 

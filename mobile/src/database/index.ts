@@ -143,6 +143,30 @@ async function initializeTables(sqlite: SQLite.SQLiteDatabase) {
       CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
     `);
 
+    // Create customers table
+    await sqlite.execAsync(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT,
+        phone_number TEXT,
+        address TEXT,
+        total_spent REAL NOT NULL DEFAULT 0,
+        total_orders INTEGER NOT NULL DEFAULT 0,
+        last_visit INTEGER,
+        notes TEXT,
+        loyalty_points INTEGER NOT NULL DEFAULT 0,
+        tier TEXT NOT NULL DEFAULT 'bronze',
+        is_active INTEGER NOT NULL DEFAULT 1,
+        sync_status TEXT NOT NULL DEFAULT 'pending',
+        last_synced_at INTEGER,
+        server_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_customers_server_id ON customers(server_id);
+    `);
+
     // Create sync_queue table
     await sqlite.execAsync(`
       CREATE TABLE IF NOT EXISTS sync_queue (

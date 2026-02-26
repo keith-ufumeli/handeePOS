@@ -57,11 +57,32 @@ export const orders = sqliteTable('orders', {
   completedAt: integer('completed_at', { mode: 'timestamp' }),
 });
 
+// Customers table (offline + sync)
+export const customers = sqliteTable('customers', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  email: text('email'),
+  phoneNumber: text('phone_number'),
+  address: text('address'), // JSON string
+  totalSpent: real('total_spent').notNull().default(0),
+  totalOrders: integer('total_orders').notNull().default(0),
+  lastVisit: integer('last_visit', { mode: 'timestamp' }),
+  notes: text('notes'),
+  loyaltyPoints: integer('loyalty_points').notNull().default(0),
+  tier: text('tier').notNull().default('bronze'),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  syncStatus: text('sync_status').notNull().default('pending'),
+  lastSyncedAt: integer('last_synced_at'),
+  serverId: text('server_id'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
 // Sync queue table
 export const syncQueue = sqliteTable('sync_queue', {
   id: text('id').primaryKey(),
   operation: text('operation').notNull(), // 'create', 'update', 'delete'
-  collection: text('collection').notNull(), // 'products', 'categories', 'orders'
+  collection: text('collection').notNull(), // 'products', 'categories', 'orders', 'customers'
   documentId: text('document_id').notNull(),
   data: text('data').notNull(), // JSON string of data to sync
   status: text('status').notNull().default('pending'), // 'pending', 'syncing', 'completed', 'failed'
