@@ -40,7 +40,7 @@ export class OrderController {
       const populatedOrder = await session.withTransaction(async () => {
         const storeId = req.user?.storeId;
         const cashierId = req.user?.userId;
-        const { items, customerId, customNote, payments } = req.body;
+        const { items, customerId, customNote, payments, orderNumber, subtotal, taxAmount, discountAmount, total, status, deviceId } = req.body;
 
         if (!storeId || !cashierId) {
           throw new Error('Store ID or Cashier ID not found');
@@ -84,16 +84,38 @@ export class OrderController {
           });
         }
 
-        // Create order
-        const orderData = {
+        // Compute totals from items when not provided (sync payloads send them for validation)
+        const computedSubtotal = items.reduce((sum: number, i: any) => sum + (Number(i.subtotal) || 0), 0);
+        const computedTaxAmount = items.reduce((sum: number, i: any) => sum + (Number(i.tax) || 0), 0);
+        const computedDiscountAmount = items.reduce((sum: number, i: any) => sum + (Number(i.discount) || 0), 0);
+        const computedTotal = computedSubtotal + computedTaxAmount - computedDiscountAmount;
+
+        const useNum = (v: any, fallback: number): number => {
+          const n = typeof v === 'number' ? v : Number(v);
+          return !Number.isNaN(n) ? n : fallback;
+        };
+
+        // Create order – use request body totals when present (e.g. from sync), else computed
+        const orderData: any = {
           storeId,
           cashierId,
           customerId: customerId || null,
           items,
+          subtotal: useNum(subtotal, computedSubtotal),
+          taxAmount: useNum(taxAmount, computedTaxAmount),
+          discountAmount: useNum(discountAmount, computedDiscountAmount),
+          total: useNum(total, computedTotal),
           customNote,
           payments: payments || [{ method: 'cash', amount: 0 }],
-          deviceId: req.body.deviceId
+          deviceId: deviceId ?? req.body.deviceId,
+          syncStatus: 'synced',
         };
+        if (orderNumber != null && String(orderNumber).trim()) {
+          orderData.orderNumber = String(orderNumber).trim();
+        }
+        if (status != null && ['pending', 'completed', 'cancelled', 'refunded'].includes(status)) {
+          orderData.status = status;
+        }
 
         const order = new Order(orderData);
         await order.save({ session });
