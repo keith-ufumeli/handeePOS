@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../../../constants/theme';
+import { useColorScheme } from '../../../hooks/use-color-scheme';
 import { useProductStore } from '../../../src/stores/productStore';
 import { Category } from '../../../src/database/types';
 
@@ -20,6 +22,9 @@ const getProductStore = () => useProductStore.getState();
 export default function EditProductScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { 
     categories, 
     getProductById, 
@@ -263,7 +268,7 @@ export default function EditProductScreen() {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading product...</Text>
       </View>
     );
@@ -318,7 +323,7 @@ export default function EditProductScreen() {
               style={styles.barcodeScanButton}
               onPress={() => router.push('/barcode-scanner')}
             >
-              <Ionicons name="barcode-outline" size={20} color="#007AFF" />
+              <Ionicons name="barcode-outline" size={20} color={theme.primary} />
             </TouchableOpacity>
           </View>
           {validationErrors.barcode && (
@@ -352,7 +357,7 @@ export default function EditProductScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Category *</Text>
             <View style={styles.emptyCategoriesContainer}>
-              <Ionicons name="alert-circle-outline" size={20} color="#FF9500" />
+              <Ionicons name="alert-circle-outline" size={20} color={theme.warning} />
               <Text style={styles.emptyCategoriesText}>
                 No categories available. Please sync products first.
               </Text>
@@ -433,7 +438,7 @@ export default function EditProductScreen() {
 
         {isLoading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
+            <ActivityIndicator size="large" color={theme.primary} />
             <Text style={styles.loadingText}>Updating product...</Text>
           </View>
         )}
@@ -442,36 +447,37 @@ export default function EditProductScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: typeof Colors.light) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.background,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: theme.cardBg,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: theme.border,
   },
   cancelButton: {
     fontSize: 16,
-    color: '#FF3B30',
+    color: theme.error,
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: theme.text,
   },
   saveButton: {
     fontSize: 16,
-    color: '#007AFF',
+    color: theme.primary,
     fontWeight: '600',
   },
   saveButtonDisabled: {
-    color: '#999',
+    color: theme.gray400,
   },
   content: {
     flex: 1,
@@ -483,20 +489,20 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: theme.text,
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: theme.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    backgroundColor: '#fff',
+    backgroundColor: theme.cardBg,
   },
   inputError: {
-    borderColor: '#FF3B30',
+    borderColor: theme.error,
   },
   textArea: {
     height: 80,
@@ -519,25 +525,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.gray100,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: theme.border,
   },
   selectOptionActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
   },
   selectOptionText: {
     fontSize: 14,
-    color: '#666',
+    color: theme.gray500,
   },
   selectOptionTextActive: {
-    color: '#fff',
+    color: theme.white,
     fontWeight: '600',
   },
   errorText: {
     fontSize: 12,
-    color: '#FF3B30',
+    color: theme.error,
     marginTop: 4,
   },
   loadingContainer: {
@@ -547,7 +553,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#666',
+    color: theme.gray500,
   },
   barcodeInputContainer: {
     flexDirection: 'row',
@@ -556,20 +562,20 @@ const styles = StyleSheet.create({
   barcodeInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: theme.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: theme.background,
     marginRight: 8,
   },
   barcodeScanButton: {
     padding: 10,
     borderRadius: 8,
-    backgroundColor: '#f0f8ff',
+    backgroundColor: theme.infoBg,
     borderWidth: 1,
-    borderColor: '#007AFF',
+    borderColor: theme.primary,
   },
   inputContainer: {
     marginBottom: 16,
@@ -584,36 +590,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: theme.background,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: theme.border,
   },
   loadingCategoriesText: {
     marginLeft: 8,
     fontSize: 14,
-    color: '#666',
+    color: theme.gray500,
   },
   emptyCategoriesContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    backgroundColor: '#FFF4E6',
+    backgroundColor: theme.warningBg,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#FFE0B2',
+    borderColor: theme.warning,
   },
   emptyCategoriesText: {
     marginLeft: 8,
     fontSize: 14,
-    color: '#E65100',
+    color: theme.warning,
     flex: 1,
   },
   hintText: {
     fontSize: 12,
-    color: '#999',
+    color: theme.gray400,
     marginTop: 4,
     fontStyle: 'italic',
   },
-});
+  });
+}
 

@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
 import { useReportStore } from '../../src/stores/reportStore';
 import { useAuthStore } from '../../src/stores/authStore';
 
@@ -27,12 +29,12 @@ interface DailySummary {
     cardSales: number;
     mobileMoneySales: number;
   };
-  hourlyBreakdown: Array<{
+  hourlyBreakdown: {
     _id: number;
     sales: number;
     orders: number;
-  }>;
-  topProducts: Array<{
+  }[];
+  topProducts: {
     _id: {
       productId: string;
       productName: string;
@@ -40,11 +42,13 @@ interface DailySummary {
     };
     totalQuantity: number;
     totalRevenue: number;
-  }>;
+  }[];
 }
 
 export default function ReportsScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const { user } = useAuthStore();
   const {
     dailySummary,
@@ -73,10 +77,10 @@ export default function ReportsScreen() {
 
   const getPaymentMethodColor = (method: string) => {
     switch (method) {
-      case 'cash': return '#10B981';
-      case 'card': return '#3B82F6';
-      case 'mobile_money': return '#8B5CF6';
-      default: return '#6B7280';
+      case 'cash': return theme.primary;
+      case 'card': return theme.accent;
+      case 'mobile_money': return theme.primaryVariant;
+      default: return theme.gray500;
     }
   };
 
@@ -91,7 +95,7 @@ export default function ReportsScreen() {
         <View style={styles.cardsContainer}>
           <View style={styles.summaryCard}>
             <View style={styles.cardHeader}>
-              <Ionicons name="cash-outline" size={24} color="#10B981" />
+              <Ionicons name="cash-outline" size={24} color={theme.primary} />
               <Text style={styles.cardTitle}>Total Sales</Text>
             </View>
             <Text style={styles.cardValue}>{formatCurrency(summary.totalSales)}</Text>
@@ -99,7 +103,7 @@ export default function ReportsScreen() {
 
           <View style={styles.summaryCard}>
             <View style={styles.cardHeader}>
-              <Ionicons name="receipt-outline" size={24} color="#3B82F6" />
+              <Ionicons name="receipt-outline" size={24} color={theme.accent} />
               <Text style={styles.cardTitle}>Total Orders</Text>
             </View>
             <Text style={styles.cardValue}>{formatNumber(summary.totalOrders)}</Text>
@@ -107,7 +111,7 @@ export default function ReportsScreen() {
 
           <View style={styles.summaryCard}>
             <View style={styles.cardHeader}>
-              <Ionicons name="cube-outline" size={24} color="#8B5CF6" />
+              <Ionicons name="cube-outline" size={24} color={theme.primaryVariant} />
               <Text style={styles.cardTitle}>Items Sold</Text>
             </View>
             <Text style={styles.cardValue}>{formatNumber(summary.totalItems)}</Text>
@@ -115,7 +119,7 @@ export default function ReportsScreen() {
 
           <View style={styles.summaryCard}>
             <View style={styles.cardHeader}>
-              <Ionicons name="trending-up-outline" size={24} color="#F59E0B" />
+              <Ionicons name="trending-up-outline" size={24} color={theme.warning} />
               <Text style={styles.cardTitle}>Avg Order Value</Text>
             </View>
             <Text style={styles.cardValue}>{formatCurrency(summary.averageOrderValue)}</Text>
@@ -127,22 +131,22 @@ export default function ReportsScreen() {
           <Text style={styles.sectionTitle}>Payment Methods</Text>
           <View style={styles.paymentMethods}>
             <View style={styles.paymentMethod}>
-              <View style={[styles.paymentIcon, { backgroundColor: '#10B981' }]}>
-                <Ionicons name="cash" size={20} color="#FFFFFF" />
+              <View style={[styles.paymentIcon, { backgroundColor: theme.primary }]}>
+                <Ionicons name="cash" size={20} color={theme.white} />
               </View>
               <Text style={styles.paymentLabel}>Cash</Text>
               <Text style={styles.paymentAmount}>{formatCurrency(summary.cashSales)}</Text>
             </View>
             <View style={styles.paymentMethod}>
-              <View style={[styles.paymentIcon, { backgroundColor: '#3B82F6' }]}>
-                <Ionicons name="card" size={20} color="#FFFFFF" />
+              <View style={[styles.paymentIcon, { backgroundColor: theme.accent }]}>
+                <Ionicons name="card" size={20} color={theme.white} />
               </View>
               <Text style={styles.paymentLabel}>Card</Text>
               <Text style={styles.paymentAmount}>{formatCurrency(summary.cardSales)}</Text>
             </View>
             <View style={styles.paymentMethod}>
-              <View style={[styles.paymentIcon, { backgroundColor: '#8B5CF6' }]}>
-                <Ionicons name="phone-portrait" size={20} color="#FFFFFF" />
+              <View style={[styles.paymentIcon, { backgroundColor: theme.primaryVariant }]}>
+                <Ionicons name="phone-portrait" size={20} color={theme.white} />
               </View>
               <Text style={styles.paymentLabel}>Mobile Money</Text>
               <Text style={styles.paymentAmount}>{formatCurrency(summary.mobileMoneySales)}</Text>
@@ -183,28 +187,28 @@ export default function ReportsScreen() {
               style={styles.actionButton}
               onPress={() => router.push('/reports/sales' as any)}
             >
-              <Ionicons name="bar-chart-outline" size={24} color="#3B82F6" />
+              <Ionicons name="bar-chart-outline" size={24} color={theme.accent} />
               <Text style={styles.actionText}>Sales Report</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionButton}
               onPress={() => router.push('/reports/inventory' as any)}
             >
-              <Ionicons name="cube-outline" size={24} color="#8B5CF6" />
+              <Ionicons name="cube-outline" size={24} color={theme.primaryVariant} />
               <Text style={styles.actionText}>Inventory</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionButton}
               onPress={() => router.push('/reports/customers' as any)}
             >
-              <Ionicons name="people-outline" size={24} color="#10B981" />
+              <Ionicons name="people-outline" size={24} color={theme.primary} />
               <Text style={styles.actionText}>Customers</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionButton}
               onPress={() => router.push('/reports/export' as any)}
             >
-              <Ionicons name="download-outline" size={24} color="#F59E0B" />
+              <Ionicons name="download-outline" size={24} color={theme.warning} />
               <Text style={styles.actionText}>Export</Text>
             </TouchableOpacity>
           </View>
@@ -228,7 +232,7 @@ export default function ReportsScreen() {
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color={theme.accent} />
         <Text style={styles.loadingText}>Loading reports...</Text>
       </View>
     );
@@ -243,7 +247,7 @@ export default function ReportsScreen() {
           onPress={refreshReports}
           disabled={refreshing}
         >
-          <Ionicons name="refresh" size={24} color="#3B82F6" />
+          <Ionicons name="refresh" size={24} color={theme.accent} />
         </TouchableOpacity>
       </View>
 
@@ -280,8 +284,8 @@ export default function ReportsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={refreshReports}
-            colors={['#3B82F6']}
-            tintColor="#3B82F6"
+            colors={[theme.accent]}
+            tintColor={theme.accent}
           />
         }
       >

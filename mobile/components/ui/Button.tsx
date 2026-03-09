@@ -53,12 +53,12 @@ export function Button({
   const getTextColor = () => {
     if (disabled) return theme.gray500;
     switch (variant) {
-      case 'primary': return '#FFFFFF';
-      case 'secondary': return '#FFFFFF';
-      case 'danger': return '#FFFFFF';
+      case 'primary': return theme.white;
+      case 'secondary': return theme.white;
+      case 'danger': return theme.white;
       case 'outline': return theme.primary;
       case 'ghost': return theme.primary;
-      default: return '#FFFFFF';
+      default: return theme.white;
     }
   };
 

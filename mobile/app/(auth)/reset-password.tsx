@@ -3,11 +3,15 @@ import { StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '../../components/themed-view';
 import { ThemedText } from '../../components/themed-text';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
 import apiService from '../../src/services/apiService';
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
   const { token } = useLocalSearchParams();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -45,13 +49,14 @@ export default function ResetPasswordScreen() {
       </ThemedText>
       
       {error && (
-        <ThemedText style={styles.error}>
+        <ThemedText style={[styles.error, { color: theme.error }]}>
           {error}
         </ThemedText>
       )}
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.text }]}
+        placeholderTextColor={theme.gray400}
         placeholder="New Password"
         value={password}
         onChangeText={setPassword}
@@ -59,7 +64,8 @@ export default function ResetPasswordScreen() {
       />
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.text }]}
+        placeholderTextColor={theme.gray400}
         placeholder="Confirm Password"
         value={confirmPassword}
         onChangeText={setConfirmPassword}
@@ -67,11 +73,11 @@ export default function ResetPasswordScreen() {
       />
 
       <TouchableOpacity
-        style={styles.button}
+        style={[styles.button, { backgroundColor: theme.primary }]}
         onPress={handleResetPassword}
         disabled={isLoading}
       >
-        <ThemedText style={styles.buttonText}>
+        <ThemedText style={[styles.buttonText, { color: theme.white }]}>
           {isLoading ? 'Resetting...' : 'Reset Password'}
         </ThemedText>
       </TouchableOpacity>
@@ -100,14 +106,11 @@ const styles = StyleSheet.create({
   input: {
     height: 50,
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
     paddingHorizontal: 15,
     marginBottom: 15,
-    backgroundColor: '#fff',
   },
   button: {
-    backgroundColor: '#0a7ea4',
     height: 50,
     borderRadius: 8,
     justifyContent: 'center',
@@ -115,12 +118,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   buttonText: {
-    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
   error: {
-    color: '#ff3b30',
     marginBottom: 20,
     textAlign: 'center',
   },

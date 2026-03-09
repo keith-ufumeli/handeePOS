@@ -101,9 +101,9 @@ export default function EditCategoryScreen() {
           disabled={isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={theme.white} />
           ) : (
-            <Text style={styles.saveBtnText}>Save</Text>
+            <Text style={[styles.saveBtnText, { color: theme.white }]}>Save</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     minWidth: 64,
     alignItems: 'center',
   },
-  saveBtnText: { color: '#fff', fontWeight: '600', fontSize: Typography.sizes.md },
+  saveBtnText: { fontWeight: '600', fontSize: Typography.sizes.md },
   content: { flex: 1, padding: Spacing.lg },
   card: {
     borderRadius: BorderRadius.lg,

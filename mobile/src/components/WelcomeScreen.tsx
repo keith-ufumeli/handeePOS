@@ -42,7 +42,7 @@ export default function WelcomeScreen() {
       <View style={styles.content}>
         {/* App Icon */}
         <View style={styles.iconContainer}>
-          <Ionicons name="storefront" size={80} color="#FFF" />
+          <Ionicons name="storefront" size={80} color={theme.white} />
         </View>
 
         {/* App Name */}
@@ -53,7 +53,7 @@ export default function WelcomeScreen() {
         <View style={[styles.connectionCard, { backgroundColor: 'rgba(255, 255, 255, 0.15)' }]}>
           {isCheckingConnection ? (
             <View style={styles.connectionStatus}>
-              <ActivityIndicator size="small" color="#FFF" />
+              <ActivityIndicator size="small" color={theme.white} />
               <Text style={styles.connectionText}>Checking connection...</Text>
             </View>
           ) : (
@@ -61,7 +61,7 @@ export default function WelcomeScreen() {
               <Ionicons
                 name={isConnected ? 'checkmark-circle' : 'close-circle'}
                 size={24}
-                color={isConnected ? '#4ADE80' : '#FCA5A5'}
+                color={isConnected ? theme.success : theme.error}
               />
               <View style={styles.connectionTextContainer}>
                 <Text style={styles.connectionText}>
@@ -92,7 +92,7 @@ export default function WelcomeScreen() {
           style={[
             styles.loginButton,
             {
-              backgroundColor: isConnected ? '#FFF' : 'rgba(255, 255, 255, 0.3)',
+              backgroundColor: isConnected ? theme.white : 'rgba(255, 255, 255, 0.3)',
               opacity: isConnected ? 1 : 0.6,
             },
           ]}
@@ -103,7 +103,7 @@ export default function WelcomeScreen() {
           <Text
             style={[
               styles.loginButtonText,
-              { color: isConnected ? theme.primary : '#FFF' },
+              { color: isConnected ? theme.primary : theme.white },
             ]}
           >
             {isConnected ? 'Continue to Login' : 'Waiting for Connection...'}

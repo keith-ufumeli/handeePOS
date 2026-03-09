@@ -8,10 +8,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
 import { useAuthStore } from '../stores/authStore';
 import { AuthStatus } from '../types/auth';
 
 export default function AuthToast() {
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const { authStatus } = useAuthStore();
   const prevStatus = useRef<AuthStatus>(authStatus);
   const slideAnim = useRef(new Animated.Value(-100)).current;
@@ -61,11 +65,11 @@ export default function AuthToast() {
 
   return (
     <Animated.View
-      style={[styles.container, { transform: [{ translateY: slideAnim }] }]}
+      style={[styles.container, { backgroundColor: theme.successBg, transform: [{ translateY: slideAnim }] }]}
     >
       <View style={styles.content}>
-        <Ionicons name="wifi" size={18} color="#10B981" />
-        <Text style={styles.text}>{message}</Text>
+        <Ionicons name="wifi" size={18} color={theme.success} />
+        <Text style={[styles.text, { color: theme.gray800 }]}>{message}</Text>
       </View>
     </Animated.View>
   );
@@ -82,7 +86,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: '#D1FAE5',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
@@ -98,6 +101,5 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#065F46',
   },
 });

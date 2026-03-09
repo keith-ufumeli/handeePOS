@@ -11,6 +11,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '../../components/themed-text';
 import { ThemedView } from '../../components/themed-view';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
 import { useAuthStore } from '../../src/stores/authStore';
 import Constants from 'expo-constants';
 
@@ -25,6 +27,8 @@ interface MenuOption {
 
 export default function MoreScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const { user, logout } = useAuthStore();
 
   const menuOptions: MenuOption[] = [
@@ -34,7 +38,7 @@ export default function MoreScreen() {
       subtitle: 'Manage customer information',
       icon: 'people',
       route: '/(tabs)/customers',
-      color: '#34C759',
+      color: theme.primary,
     },
     {
       id: 'categories',
@@ -42,7 +46,7 @@ export default function MoreScreen() {
       subtitle: 'Organise products into categories',
       icon: 'pricetags',
       route: '/categories',
-      color: '#AF52DE',
+      color: theme.primaryVariant,
     },
     {
       id: 'reports',
@@ -50,7 +54,7 @@ export default function MoreScreen() {
       subtitle: 'View sales analytics and insights',
       icon: 'bar-chart',
       route: '/(tabs)/reports',
-      color: '#FF9500',
+      color: theme.warning,
     },
     {
       id: 'settings',
@@ -58,7 +62,7 @@ export default function MoreScreen() {
       subtitle: 'Configure store and app settings',
       icon: 'settings',
       route: '/(tabs)/settings',
-      color: '#007AFF',
+      color: theme.accent,
     },
   ];
 
@@ -98,8 +102,8 @@ export default function MoreScreen() {
           </ThemedText>
           {user && (
             <View style={styles.userInfo}>
-              <View style={styles.avatar}>
-                <Ionicons name="person" size={24} color="#fff" />
+              <View style={[styles.avatar, { backgroundColor: theme.accent }]}>
+                <Ionicons name="person" size={24} color={theme.white} />
               </View>
               <View style={styles.userDetails}>
                 <ThemedText style={styles.userName}>{user.fullName}</ThemedText>
@@ -116,6 +120,7 @@ export default function MoreScreen() {
               key={option.id}
               style={[
                 styles.menuOption,
+                { backgroundColor: theme.cardBg, borderBottomColor: theme.border },
                 index === 0 && styles.firstOption,
                 index === menuOptions.length - 1 && styles.lastOption,
               ]}
@@ -129,7 +134,7 @@ export default function MoreScreen() {
                 <ThemedText style={styles.optionTitle}>{option.title}</ThemedText>
                 <ThemedText style={styles.optionSubtitle}>{option.subtitle}</ThemedText>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
+              <Ionicons name="chevron-forward" size={20} color={theme.gray400} />
             </TouchableOpacity>
           ))}
         </View>
@@ -137,14 +142,14 @@ export default function MoreScreen() {
         {/* Logout Button */}
         <View style={styles.logoutSection}>
           <TouchableOpacity
-            style={styles.logoutButton}
+            style={[styles.logoutButton, { backgroundColor: theme.cardBg }]}
             onPress={handleLogout}
             activeOpacity={0.7}
           >
-            <View style={styles.logoutIconContainer}>
-              <Ionicons name="log-out" size={24} color="#FF3B30" />
+            <View style={[styles.logoutIconContainer, { backgroundColor: theme.errorBg }]}>
+              <Ionicons name="log-out" size={24} color={theme.error} />
             </View>
-            <ThemedText style={styles.logoutText}>Logout</ThemedText>
+            <ThemedText style={[styles.logoutText, { color: theme.error }]}>Logout</ThemedText>
           </TouchableOpacity>
         </View>
 

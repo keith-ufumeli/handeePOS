@@ -11,6 +11,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '../../components/themed-view';
 import { ThemedText } from '../../components/themed-text';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
 import { useAuthStore } from '../../src/stores/authStore';
 import { AuthStatus } from '../../src/types/auth';
 import {
@@ -26,6 +28,8 @@ interface KnownUser {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -123,7 +127,7 @@ export default function LoginScreen() {
       return (
         <ThemedView style={styles.container}>
           <ThemedText type="title" style={styles.title}>Offline Sign In</ThemedText>
-          <ThemedText style={styles.offlineInfo}>
+          <ThemedText style={[styles.offlineInfo, { color: theme.gray500 }]}>
             This device hasn&apos;t been set up for your account yet.
             Please sign in online first.
           </ThemedText>
@@ -137,40 +141,41 @@ export default function LoginScreen() {
           Offline Sign In
         </ThemedText>
 
-        <ThemedText style={styles.offlineInfo}>
+        <ThemedText style={[styles.offlineInfo, { color: theme.gray500 }]}>
           You&apos;re offline. Enter your password to access your saved session.
         </ThemedText>
 
         {statusMessage ? (
-          <ThemedText style={styles.statusMessage}>{statusMessage}</ThemedText>
+          <ThemedText style={[styles.statusMessage, { color: theme.warning }]}>{statusMessage}</ThemedText>
         ) : null}
 
         {/* P7-01: User selector — shown when multiple known users exist */}
         {!loadingKnownUsers && knownUsers.length > 1 ? (
           <TouchableOpacity
-            style={[styles.input, styles.userSelectorButton]}
+            style={[styles.input, styles.userSelectorButton, { borderColor: theme.border, backgroundColor: theme.cardBg }]}
             onPress={() => setShowUserPicker(true)}
           >
-            <ThemedText style={styles.userSelectorText}>
+            <ThemedText style={[styles.userSelectorText, { color: theme.text }]}>
               {offlineUser?.email ?? 'Select account...'}
             </ThemedText>
-            <Ionicons name="chevron-down" size={16} color="#555" />
+            <Ionicons name="chevron-down" size={16} color={theme.gray500} />
           </TouchableOpacity>
         ) : (
           /* Single known user — read-only identity display */
-          <View style={[styles.input, styles.readonlyInput]}>
-            <ThemedText style={styles.readonlyText}>
+          <View style={[styles.input, styles.readonlyInput, { borderColor: theme.border, backgroundColor: theme.inputBg }]}>
+            <ThemedText style={[styles.readonlyText, { color: theme.gray600 }]}>
               {offlineUser?.email ?? user?.email ?? ''}
             </ThemedText>
           </View>
         )}
 
         {error ? (
-          <ThemedText style={styles.error}>{error}</ThemedText>
+          <ThemedText style={[styles.error, { color: theme.error }]}>{error}</ThemedText>
         ) : null}
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, { borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.text }]}
+          placeholderTextColor={theme.gray400}
           placeholder="Password"
           value={password}
           onChangeText={(v) => {
@@ -182,16 +187,16 @@ export default function LoginScreen() {
         />
 
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, { backgroundColor: theme.primary }]}
           onPress={handleOfflineLogin}
           disabled={isLoading || !password || (!selectedUserId && !user?.userId)}
         >
-          <ThemedText style={styles.buttonText}>
+          <ThemedText style={[styles.buttonText, { color: theme.white }]}>
             {isLoading ? 'Verifying...' : 'Continue Offline'}
           </ThemedText>
         </TouchableOpacity>
 
-        <ThemedText style={styles.offlineFootnote}>
+        <ThemedText style={[styles.offlineFootnote, { color: theme.gray500 }]}>
           Offline access is limited to previously cached data.
           Connect to the internet to sync the latest changes.
         </ThemedText>
@@ -208,7 +213,7 @@ export default function LoginScreen() {
             activeOpacity={1}
             onPress={() => setShowUserPicker(false)}
           >
-            <View style={styles.modalCard}>
+            <View style={[styles.modalCard, { backgroundColor: theme.cardBg }]}>
               <ThemedText type="defaultSemiBold" style={styles.modalTitle}>
                 Select Account
               </ThemedText>
@@ -220,21 +225,21 @@ export default function LoginScreen() {
                     style={styles.userRow}
                     onPress={() => handleSelectUser(item)}
                   >
-                    <View style={styles.userAvatar}>
-                      <ThemedText style={styles.userAvatarText}>
+                    <View style={[styles.userAvatar, { backgroundColor: theme.primary }]}>
+                      <ThemedText style={[styles.userAvatarText, { color: theme.white }]}>
                         {item.profile.fullName.charAt(0).toUpperCase()}
                       </ThemedText>
                     </View>
                     <View style={styles.userInfo}>
                       <ThemedText type="defaultSemiBold">{item.profile.fullName}</ThemedText>
-                      <ThemedText style={styles.userEmail}>{item.profile.email}</ThemedText>
+                      <ThemedText style={[styles.userEmail, { color: theme.gray500 }]}>{item.profile.email}</ThemedText>
                     </View>
                     {selectedUserId === item.userId && (
-                      <Ionicons name="checkmark-circle" size={20} color="#0a7ea4" />
+                      <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
                     )}
                   </TouchableOpacity>
                 )}
-                ItemSeparatorComponent={() => <View style={styles.separator} />}
+                ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: theme.border }]} />}
               />
             </View>
           </TouchableOpacity>
@@ -258,15 +263,16 @@ export default function LoginScreen() {
       </ThemedText>
 
       {contextBanner ? (
-        <ThemedText style={styles.statusMessage}>{contextBanner}</ThemedText>
+        <ThemedText style={[styles.statusMessage, { color: theme.warning }]}>{contextBanner}</ThemedText>
       ) : null}
 
       {error ? (
-        <ThemedText style={styles.error}>{error}</ThemedText>
+        <ThemedText style={[styles.error, { color: theme.error }]}>{error}</ThemedText>
       ) : null}
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.text }]}
+        placeholderTextColor={theme.gray400}
         placeholder="Email"
         value={email}
         onChangeText={setEmail}
@@ -275,7 +281,8 @@ export default function LoginScreen() {
       />
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.text }]}
+        placeholderTextColor={theme.gray400}
         placeholder="Password"
         value={password}
         onChangeText={setPassword}
@@ -283,11 +290,11 @@ export default function LoginScreen() {
       />
 
       <TouchableOpacity
-        style={styles.button}
+        style={[styles.button, { backgroundColor: theme.primary }]}
         onPress={handleOnlineLogin}
         disabled={isLoading}
       >
-        <ThemedText style={styles.buttonText}>
+        <ThemedText style={[styles.buttonText, { color: theme.white }]}>
           {isLoading ? 'Logging in...' : 'Login'}
         </ThemedText>
       </TouchableOpacity>
@@ -296,7 +303,7 @@ export default function LoginScreen() {
         style={styles.rememberMeContainer}
         onPress={() => setRememberMe(!rememberMe)}
       >
-        <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]} />
+        <View style={[styles.checkbox, { borderColor: theme.primary }, rememberMe && { backgroundColor: theme.primary }]} />
         <ThemedText>Remember me</ThemedText>
       </TouchableOpacity>
 
@@ -338,16 +345,13 @@ const styles = StyleSheet.create({
   offlineInfo: {
     textAlign: 'center',
     marginBottom: 16,
-    color: '#555',
   },
   offlineFootnote: {
     marginTop: 20,
     textAlign: 'center',
     fontSize: 12,
-    color: '#888',
   },
   statusMessage: {
-    color: '#e67e00',
     marginBottom: 16,
     textAlign: 'center',
     fontSize: 14,
@@ -355,29 +359,21 @@ const styles = StyleSheet.create({
   input: {
     height: 50,
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
     paddingHorizontal: 15,
     marginBottom: 15,
-    backgroundColor: '#fff',
   },
   readonlyInput: {
     justifyContent: 'center',
-    backgroundColor: '#f5f5f5',
   },
-  readonlyText: {
-    color: '#555',
-  },
+  readonlyText: {},
   userSelectorButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  userSelectorText: {
-    color: '#333',
-  },
+  userSelectorText: {},
   button: {
-    backgroundColor: '#0a7ea4',
     height: 50,
     borderRadius: 8,
     justifyContent: 'center',
@@ -385,12 +381,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   buttonText: {
-    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
   error: {
-    color: '#ff3b30',
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -404,12 +398,8 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderWidth: 2,
-    borderColor: '#0a7ea4',
     borderRadius: 4,
     marginRight: 10,
-  },
-  checkboxChecked: {
-    backgroundColor: '#0a7ea4',
   },
   forgotPassword: {
     marginBottom: 10,
@@ -429,7 +419,6 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: '100%',
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 20,
     maxHeight: 400,
@@ -448,12 +437,10 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#0a7ea4',
     justifyContent: 'center',
     alignItems: 'center',
   },
   userAvatarText: {
-    color: '#fff',
     fontWeight: '700',
     fontSize: 16,
   },
@@ -462,11 +449,9 @@ const styles = StyleSheet.create({
   },
   userEmail: {
     fontSize: 12,
-    color: '#666',
     marginTop: 2,
   },
   separator: {
     height: 1,
-    backgroundColor: '#f0f0f0',
   },
 });

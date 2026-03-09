@@ -164,7 +164,7 @@ export default function ProductsScreen() {
             >
               <Text style={[
                 styles.categoryChipText,
-                { color: !filters.category ? '#FFF' : theme.text },
+                { color: !filters.category ? theme.white : theme.text },
               ]}>
                 All
               </Text>
@@ -182,7 +182,7 @@ export default function ProductsScreen() {
               >
                 <Text style={[
                   styles.categoryChipText,
-                  { color: filters.category === catId ? '#FFF' : theme.text },
+                  { color: filters.category === catId ? theme.white : theme.text },
                 ]}>
                   {category.name}
                 </Text>
@@ -264,12 +264,12 @@ export default function ProductsScreen() {
           <Ionicons 
             name={filters.lowStock ? "warning" : "warning-outline"} 
             size={16} 
-            color={filters.lowStock ? "#fff" : theme.gray500} 
+            color={filters.lowStock ? theme.white : theme.gray500} 
             style={{ marginRight: 6 }}
           />
           <Text style={[
             styles.filterButtonText,
-            { color: filters.lowStock ? "#fff" : theme.text },
+            { color: filters.lowStock ? theme.white : theme.text },
           ]}>
             Low Stock
           </Text>

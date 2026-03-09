@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,8 @@ import {
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import { useAuthStore } from '../../src/stores/authStore';
 
@@ -136,15 +138,17 @@ interface PickerModalProps {
 }
 
 function PickerModal({ visible, title, options, selected, onSelect, onClose }: PickerModalProps) {
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
       <TouchableOpacity style={pickerStyles.overlay} activeOpacity={1} onPress={onClose} />
-      <SafeAreaView style={pickerStyles.sheet}>
-        <View style={pickerStyles.handle} />
+      <SafeAreaView style={[pickerStyles.sheet, { backgroundColor: theme.cardBg }]}>
+        <View style={[pickerStyles.handle, { backgroundColor: theme.gray300 }]} />
         <View style={pickerStyles.sheetHeader}>
-          <Text style={pickerStyles.sheetTitle}>{title}</Text>
+          <Text style={[pickerStyles.sheetTitle, { color: theme.text }]}>{title}</Text>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="close" size={22} color="#6B7280" />
+            <Ionicons name="close" size={22} color={theme.gray500} />
           </TouchableOpacity>
         </View>
         <FlatList
@@ -155,15 +159,15 @@ function PickerModal({ visible, title, options, selected, onSelect, onClose }: P
               style={pickerStyles.option}
               onPress={() => { onSelect(item.value); onClose(); }}
             >
-              <Text style={[pickerStyles.optionText, item.value === selected && pickerStyles.optionSelected]}>
+              <Text style={[pickerStyles.optionText, { color: theme.gray700 }, item.value === selected && { color: theme.accent, fontWeight: '600' }]}>
                 {item.label}
               </Text>
               {item.value === selected && (
-                <Ionicons name="checkmark" size={20} color="#3B82F6" />
+                <Ionicons name="checkmark" size={20} color={theme.accent} />
               )}
             </TouchableOpacity>
           )}
-          ItemSeparatorComponent={() => <View style={pickerStyles.separator} />}
+          ItemSeparatorComponent={() => <View style={[pickerStyles.separator, { backgroundColor: theme.border }]} />}
           style={pickerStyles.list}
         />
       </SafeAreaView>
@@ -181,7 +185,6 @@ const pickerStyles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '60%',
@@ -190,7 +193,6 @@ const pickerStyles = StyleSheet.create({
   handle: {
     width: 40,
     height: 4,
-    backgroundColor: '#D1D5DB',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 12,
@@ -220,15 +222,9 @@ const pickerStyles = StyleSheet.create({
   },
   optionText: {
     fontSize: 16,
-    color: '#374151',
-  },
-  optionSelected: {
-    color: '#3B82F6',
-    fontWeight: '600',
   },
   separator: {
     height: 1,
-    backgroundColor: '#F3F4F6',
     marginHorizontal: 20,
   },
 });
@@ -236,6 +232,9 @@ const pickerStyles = StyleSheet.create({
 // ─── Settings Screen ──────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { user } = useAuthStore();
   const {
     storeSettings,
@@ -328,7 +327,7 @@ export default function SettingsScreen() {
         onPress={() => isEditing && setPicker({ type: pickerType })}
         activeOpacity={isEditing ? 0.7 : 1}
       >
-        <Text style={[styles.pickerText, !value && { color: '#9CA3AF' }]}>{value || '—'}</Text>
+        <Text style={[styles.pickerText, !value && { color: theme.gray400 }]}>{value || '—'}</Text>
         {isEditing && <Ionicons name="chevron-down" size={20} color="#6B7280" />}
       </TouchableOpacity>
     </View>
@@ -765,7 +764,7 @@ export default function SettingsScreen() {
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color={theme.accent} />
         <Text style={styles.loadingText}>Loading settings...</Text>
       </View>
     );
@@ -803,7 +802,7 @@ export default function SettingsScreen() {
             </>
           ) : (
             <TouchableOpacity style={styles.editButton} onPress={() => setIsEditing(true)}>
-              <Ionicons name="create-outline" size={24} color="#3B82F6" />
+              <Ionicons name="create-outline" size={24} color={theme.accent} />
             </TouchableOpacity>
           )}
         </View>
@@ -831,8 +830,8 @@ export default function SettingsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={refreshSettings}
-            colors={['#3B82F6']}
-            tintColor="#3B82F6"
+            colors={[theme.accent]}
+            tintColor={theme.accent}
           />
         }
       >
@@ -841,7 +840,7 @@ export default function SettingsScreen() {
           <View style={styles.profileCard}>
             <View style={styles.profileHeader}>
               <View style={styles.profileAvatar}>
-                <Ionicons name="person" size={32} color="#fff" />
+                <Ionicons name="person" size={32} color={theme.white} />
               </View>
               <View style={styles.profileInfo}>
                 <Text style={styles.profileName}>{user?.fullName || 'User'}</Text>
@@ -862,93 +861,94 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  editButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-  },
-  saveButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#10B981',
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  cancelButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-  },
-  cancelButtonText: {
-    color: '#6B7280',
-    fontWeight: '600',
-  },
-  tabContainer: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  tabScroll: {
-    paddingHorizontal: 20,
-  },
-  tab: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  activeTab: {
-    borderBottomColor: '#3B82F6',
-  },
-  tabText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  activeTabText: {
-    color: '#3B82F6',
-  },
+function createStyles(theme: typeof Colors.light) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: theme.background,
+    },
+    loadingText: {
+      marginTop: 16,
+      fontSize: 16,
+      color: theme.gray500,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingTop: 60,
+      paddingBottom: 20,
+      backgroundColor: theme.cardBg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    editButton: {
+      padding: 8,
+      borderRadius: 8,
+      backgroundColor: theme.gray100,
+    },
+    saveButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: theme.primary,
+    },
+    saveButtonText: {
+      color: theme.white,
+      fontWeight: '600',
+    },
+    cancelButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: theme.gray100,
+    },
+    cancelButtonText: {
+      color: theme.gray500,
+      fontWeight: '600',
+    },
+    tabContainer: {
+      backgroundColor: theme.cardBg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    tabScroll: {
+      paddingHorizontal: 20,
+    },
+    tab: {
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderBottomWidth: 2,
+      borderBottomColor: 'transparent',
+    },
+    activeTab: {
+      borderBottomColor: theme.accent,
+    },
+    tabText: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: theme.gray500,
+    },
+    activeTabText: {
+      color: theme.accent,
+    },
   content: {
     flex: 1,
   },
@@ -956,7 +956,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   section: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.cardBg,
     borderRadius: 12,
     padding: 20,
     marginBottom: 20,
@@ -969,7 +969,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.text,
     marginBottom: 20,
   },
   inputGroup: {
@@ -978,18 +978,18 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#374151',
+    color: theme.gray700,
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 16,
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
+    color: theme.text,
+    backgroundColor: theme.cardBg,
   },
   textArea: {
     height: 80,
@@ -1000,18 +1000,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.cardBg,
   },
   pickerDisabled: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme.background,
   },
   pickerText: {
     fontSize: 16,
-    color: '#111827',
+    color: theme.text,
   },
   row: {
     flexDirection: 'row',
@@ -1028,7 +1028,7 @@ const styles = StyleSheet.create({
   },
   featureDescription: {
     fontSize: 12,
-    color: '#6B7280',
+    color: theme.gray500,
     marginTop: 4,
   },
   dayContainer: {
@@ -1043,7 +1043,7 @@ const styles = StyleSheet.create({
   dayName: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#111827',
+    color: theme.text,
   },
   timeInputs: {
     flexDirection: 'row',
@@ -1056,18 +1056,18 @@ const styles = StyleSheet.create({
   },
   timeLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: theme.gray500,
     marginBottom: 4,
   },
   timeInputField: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     fontSize: 14,
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
+    color: theme.text,
+    backgroundColor: theme.cardBg,
   },
   profileSection: {
     paddingHorizontal: 20,
@@ -1075,7 +1075,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   profileCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.cardBg,
     borderRadius: 12,
     padding: 20,
     shadowColor: '#000',
@@ -1092,7 +1092,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#3B82F6',
+    backgroundColor: theme.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -1103,17 +1103,18 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.text,
     marginBottom: 4,
   },
   profileEmail: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.gray500,
     marginBottom: 2,
   },
   profileRole: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: theme.gray400,
     textTransform: 'capitalize',
   },
-});
+  });
+}

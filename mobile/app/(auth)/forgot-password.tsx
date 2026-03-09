@@ -3,10 +3,14 @@ import { StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '../../components/themed-view';
 import { ThemedText } from '../../components/themed-text';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
 import apiService from '../../src/services/apiService';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -35,19 +39,20 @@ export default function ForgotPasswordScreen() {
       </ThemedText>
       
       {message && (
-        <ThemedText style={styles.message}>
+        <ThemedText style={[styles.message, { color: theme.success }]}>
           {message}
         </ThemedText>
       )}
 
       {error && (
-        <ThemedText style={styles.error}>
+        <ThemedText style={[styles.error, { color: theme.error }]}>
           {error}
         </ThemedText>
       )}
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.text }]}
+        placeholderTextColor={theme.gray400}
         placeholder="Email"
         value={email}
         onChangeText={setEmail}
@@ -56,11 +61,11 @@ export default function ForgotPasswordScreen() {
       />
 
       <TouchableOpacity
-        style={styles.button}
+        style={[styles.button, { backgroundColor: theme.primary }]}
         onPress={handleForgotPassword}
         disabled={isLoading}
       >
-        <ThemedText style={styles.buttonText}>
+        <ThemedText style={[styles.buttonText, { color: theme.white }]}>
           {isLoading ? 'Sending...' : 'Send Reset Link'}
         </ThemedText>
       </TouchableOpacity>
@@ -89,14 +94,11 @@ const styles = StyleSheet.create({
   input: {
     height: 50,
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
     paddingHorizontal: 15,
     marginBottom: 15,
-    backgroundColor: '#fff',
   },
   button: {
-    backgroundColor: '#0a7ea4',
     height: 50,
     borderRadius: 8,
     justifyContent: 'center',
@@ -104,17 +106,14 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   buttonText: {
-    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
   error: {
-    color: '#ff3b30',
     marginBottom: 20,
     textAlign: 'center',
   },
   message: {
-    color: '#34c759',
     marginBottom: 20,
     textAlign: 'center',
   },

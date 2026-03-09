@@ -5,24 +5,25 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorLight = '#10B981';
+const tintColorDark = '#34D399';
 
 export const Colors = {
   light: {
-    text: '#1A1A1A',
-    background: '#F8F9FA',
-    tint: '#2563EB', // Primary Blue
+    text: '#111827',
+    background: '#FFFFFF',
+    tint: '#10B981', // Emerald primary
     icon: '#64748B',
     tabIconDefault: '#94A3B8',
-    tabIconSelected: '#2563EB',
+    tabIconSelected: '#10B981',
     
     // Brand Colors
-    primary: '#2563EB',
-    primaryLight: '#3B82F6',
-    primaryDark: '#1D4ED8',
-    secondary: '#4F46E5', // Indigo
-    accent: '#8B5CF6', // Violet
+    primary: '#10B981', // Emerald
+    primaryLight: '#34D399',
+    primaryDark: '#059669',
+    primaryVariant: '#0EA5A4', // Teal
+    secondary: '#0EA5A4', // Teal
+    accent: '#3B82F6', // Blue — highlights, info, secondary actions
     
     // Status Colors
     success: '#10B981',
@@ -55,17 +56,18 @@ export const Colors = {
   dark: {
     text: '#F3F4F6',
     background: '#111827',
-    tint: '#60A5FA',
+    tint: '#34D399',
     icon: '#9CA3AF',
     tabIconDefault: '#6B7280',
-    tabIconSelected: '#60A5FA',
+    tabIconSelected: '#34D399',
     
     // Brand Colors
-    primary: '#3B82F6',
-    primaryLight: '#60A5FA',
-    primaryDark: '#2563EB',
-    secondary: '#6366F1',
-    accent: '#A78BFA',
+    primary: '#34D399',
+    primaryLight: '#6EE7B7',
+    primaryDark: '#10B981',
+    primaryVariant: '#2DD4BF',
+    secondary: '#0EA5A4',
+    accent: '#60A5FA',
     
     // Status Colors
     success: '#34D399',

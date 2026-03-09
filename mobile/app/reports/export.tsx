@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
 import { useReportStore, ExportReportType, ExportGroupBy } from '../../src/stores/reportStore';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -192,6 +194,8 @@ function formatDisplayDate(date: Date): string {
 
 export default function ExportReportScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const { exportReport, exporting } = useReportStore();
 
   const [reportType, setReportType] = useState<ExportReportType>('sales');
@@ -222,6 +226,7 @@ export default function ExportReportScreen() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
+  const styles = useExportStyles(theme);
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -230,7 +235,7 @@ export default function ExportReportScreen() {
           onPress={() => router.back()}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="arrow-back" size={24} color="#333" />
+          <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Export Report</Text>
         <View style={{ width: 24 }} />
@@ -259,7 +264,7 @@ export default function ExportReportScreen() {
                 <Ionicons
                   name={type.icon as any}
                   size={20}
-                  color={reportType === type.value ? '#fff' : '#6B7280'}
+                  color={reportType === type.value ? theme.white : theme.gray500}
                 />
               </View>
               <View style={styles.typeText}>
@@ -269,7 +274,7 @@ export default function ExportReportScreen() {
                 <Text style={styles.typeDesc}>{type.description}</Text>
               </View>
               {reportType === type.value && (
-                <Ionicons name="checkmark-circle" size={20} color="#007AFF" />
+                <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
               )}
             </TouchableOpacity>
           ))}
@@ -336,7 +341,7 @@ export default function ExportReportScreen() {
 
         {/* Summary */}
         <View style={styles.summaryCard}>
-          <Ionicons name="document-text-outline" size={18} color="#007AFF" />
+          <Ionicons name="document-text-outline" size={18} color={theme.primary} />
           <Text style={styles.summaryText}>
             Exporting{' '}
             <Text style={styles.summaryBold}>{selectedType.label}</Text>
@@ -358,12 +363,12 @@ export default function ExportReportScreen() {
         >
           {exporting ? (
             <>
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={theme.white} />
               <Text style={styles.exportButtonText}>Preparing export…</Text>
             </>
           ) : (
             <>
-              <Ionicons name="share-outline" size={20} color="#fff" />
+              <Ionicons name="share-outline" size={20} color={theme.white} />
               <Text style={styles.exportButtonText}>Export CSV</Text>
             </>
           )}
@@ -377,10 +382,11 @@ export default function ExportReportScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function useExportStyles(theme: typeof Colors.light) {
+  return useMemo(() => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.background,
   },
   header: {
     flexDirection: 'row',
@@ -388,14 +394,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: '#fff',
+    backgroundColor: theme.cardBg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: theme.border,
   },
   headerTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#111',
+    color: theme.text,
   },
   content: {
     flex: 1,
@@ -404,14 +410,14 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6B7280',
+    color: theme.gray500,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
     marginTop: 16,
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.cardBg,
     borderRadius: 12,
     overflow: 'hidden',
   },
@@ -423,21 +429,21 @@ const styles = StyleSheet.create({
   },
   typeRowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: theme.border,
   },
   typeRowSelected: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: theme.infoBg,
   },
   typeIcon: {
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: theme.gray100,
     alignItems: 'center',
     justifyContent: 'center',
   },
   typeIconSelected: {
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
   },
   typeText: {
     flex: 1,
@@ -445,14 +451,14 @@ const styles = StyleSheet.create({
   typeLabel: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#111',
+    color: theme.text,
   },
   typeLabelSelected: {
-    color: '#007AFF',
+    color: theme.primary,
   },
   typeDesc: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: theme.gray400,
     marginTop: 2,
   },
   chipContainer: {
@@ -465,26 +471,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: theme.gray100,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.border,
   },
   chipSelected: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
   },
   chipText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#374151',
+    color: theme.gray700,
   },
   chipTextSelected: {
-    color: '#fff',
+    color: theme.white,
   },
   summaryCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#EFF6FF',
+    backgroundColor: theme.infoBg,
     borderRadius: 10,
     padding: 14,
     marginTop: 20,
@@ -493,33 +499,34 @@ const styles = StyleSheet.create({
   summaryText: {
     flex: 1,
     fontSize: 14,
-    color: '#374151',
+    color: theme.gray700,
     lineHeight: 20,
   },
   summaryBold: {
     fontWeight: '700',
-    color: '#1D4ED8',
+    color: theme.primaryDark,
   },
   summaryDates: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.gray500,
   },
   exportButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     borderRadius: 12,
     paddingVertical: 16,
     marginTop: 16,
     gap: 10,
   },
   exportButtonDisabled: {
-    backgroundColor: '#93C5FD',
+    backgroundColor: theme.infoBg,
   },
   exportButtonText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#fff',
+    color: theme.white,
   },
-});
+  }), [theme]);
+}

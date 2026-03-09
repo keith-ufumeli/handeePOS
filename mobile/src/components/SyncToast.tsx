@@ -8,9 +8,13 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
 import { useSyncStore } from '../stores/syncStore';
 
 export default function SyncToast() {
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const { syncStatus, pendingCount, syncAll } = useSyncStore();
   const slideAnim = useRef(new Animated.Value(-100)).current;
   const previousStatus = useRef(syncStatus);
@@ -59,32 +63,32 @@ export default function SyncToast() {
       case 'synced':
         return {
           icon: 'checkmark-circle' as const,
-          color: '#10B981',
-          bgColor: '#D1FAE5',
+          color: theme.success,
+          bgColor: theme.successBg,
           text: 'Synced successfully',
           showAction: false,
         };
       case 'syncing':
         return {
           icon: 'sync' as const,
-          color: '#3B82F6',
-          bgColor: '#DBEAFE',
+          color: theme.accent,
+          bgColor: theme.infoBg,
           text: `Syncing ${pendingCount} item${pendingCount !== 1 ? 's' : ''}...`,
           showAction: false,
         };
       case 'error':
         return {
           icon: 'alert-circle' as const,
-          color: '#EF4444',
-          bgColor: '#FEE2E2',
+          color: theme.error,
+          bgColor: theme.errorBg,
           text: 'Sync failed',
           showAction: true,
         };
       case 'offline':
         return {
           icon: 'cloud-offline' as const,
-          color: '#6B7280',
-          bgColor: '#F3F4F6',
+          color: theme.gray500,
+          bgColor: theme.gray100,
           text: `Offline - ${pendingCount} pending`,
           showAction: true,
         };
@@ -116,7 +120,7 @@ export default function SyncToast() {
           style={[styles.actionButton, { backgroundColor: config.color }]}
           onPress={syncAll}
         >
-          <Text style={styles.actionText}>Retry</Text>
+          <Text style={[styles.actionText, { color: theme.white }]}>Retry</Text>
         </TouchableOpacity>
       )}
     </Animated.View>
@@ -163,7 +167,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   actionText: {
-    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
   },

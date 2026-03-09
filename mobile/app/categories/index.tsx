@@ -69,7 +69,7 @@ export default function CategoriesScreen() {
 
   const renderCategory = ({ item }: { item: Category }) => (
     <View style={[styles.categoryCard, { backgroundColor: theme.cardBg, ...Shadows.md }]}>
-      <View style={styles.categoryIcon}>
+      <View style={[styles.categoryIcon, { backgroundColor: theme.infoBg }]}>
         <Ionicons name="pricetag" size={22} color={theme.primary} />
       </View>
       <View style={styles.categoryInfo}>
@@ -127,7 +127,7 @@ export default function CategoriesScreen() {
           style={[styles.addBtn, { backgroundColor: theme.primary }]}
           onPress={() => router.push('/categories/new' as any)}
         >
-          <Ionicons name="add" size={22} color="#fff" />
+          <Ionicons name="add" size={22} color={theme.white} />
         </TouchableOpacity>
       </View>
 
@@ -156,7 +156,7 @@ export default function CategoriesScreen() {
                 style={[styles.emptyBtn, { backgroundColor: theme.primary }]}
                 onPress={() => router.push('/categories/new' as any)}
               >
-                <Text style={styles.emptyBtnText}>Add Category</Text>
+                <Text style={[styles.emptyBtnText, { color: theme.white }]}>Add Category</Text>
               </TouchableOpacity>
             </View>
           }
@@ -220,7 +220,6 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: BorderRadius.md,
-    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: Spacing.md,
@@ -280,7 +279,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
   },
   emptyBtnText: {
-    color: '#fff',
     fontWeight: '600',
     fontSize: Typography.sizes.md,
   },

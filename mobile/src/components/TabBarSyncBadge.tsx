@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
 import { useSyncStore } from '../stores/syncStore';
 
 interface TabBarSyncBadgeProps {
@@ -7,6 +9,8 @@ interface TabBarSyncBadgeProps {
 }
 
 export default function TabBarSyncBadge({ color }: TabBarSyncBadgeProps) {
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const { syncStatus, pendingCount } = useSyncStore();
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -37,15 +41,15 @@ export default function TabBarSyncBadge({ color }: TabBarSyncBadgeProps) {
   const getBadgeColor = () => {
     switch (syncStatus) {
       case 'synced':
-        return '#10B981'; // Green
+        return theme.success;
       case 'syncing':
-        return '#3B82F6'; // Blue
+        return theme.accent;
       case 'error':
-        return '#EF4444'; // Red
+        return theme.error;
       case 'offline':
-        return '#F59E0B'; // Orange/Amber
+        return theme.warning;
       default:
-        return '#6B7280'; // Gray
+        return theme.gray500;
     }
   };
 
@@ -61,12 +65,13 @@ export default function TabBarSyncBadge({ color }: TabBarSyncBadgeProps) {
           styles.badge,
           {
             backgroundColor: getBadgeColor(),
+            borderColor: theme.white,
             transform: [{ scale: pulseAnim }],
           },
         ]}
       >
         {pendingCount > 0 && (
-          <View style={styles.countBadge}>
+          <View style={[styles.countBadge, { backgroundColor: theme.white }]}>
             {/* Small indicator for pending count */}
           </View>
         )}
@@ -86,7 +91,6 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
   },
   countBadge: {
     position: 'absolute',
@@ -95,6 +99,5 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#FFFFFF',
   },
 });

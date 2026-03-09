@@ -171,7 +171,7 @@ export default function SalesScreen() {
               <View style={styles.productMeta}>
                 <Badge label={item.sku} variant="default" style={{ backgroundColor: theme.gray200 }} />
                 {item.isLowStock && (
-                  <View style={styles.lowStockBadge}>
+                  <View style={[styles.lowStockBadge, { backgroundColor: theme.warningBg }]}>
                     <Ionicons name="warning" size={12} color={theme.warning} />
                     <Text style={[styles.lowStockText, { color: theme.warning }]}>Low</Text>
                   </View>
@@ -192,7 +192,7 @@ export default function SalesScreen() {
             {/* Add to Cart Icon */}
             {!isInCart && (
               <View style={[styles.addToCartIcon, { backgroundColor: theme.primary }]}>
-                <Ionicons name="add" size={20} color="#fff" />
+                <Ionicons name="add" size={20} color={theme.white} />
               </View>
             )}
           </View>
@@ -217,7 +217,7 @@ export default function SalesScreen() {
               style={[styles.quantityButton, { backgroundColor: theme.primary }]}
               onPress={() => handleUpdateQuantity(item.id, cartItem.quantity + 1)}
             >
-              <Ionicons name="add" size={18} color="#fff" />
+              <Ionicons name="add" size={18} color={theme.white} />
             </TouchableOpacity>
             
             <View style={styles.itemTotal}>
@@ -250,7 +250,7 @@ export default function SalesScreen() {
           </Text>
         </View>
 
-        <View style={styles.cartItemQuantityControls}>
+        <View style={[styles.cartItemQuantityControls, { backgroundColor: theme.gray100 }]}>
           <TouchableOpacity
             style={[styles.miniQuantityButton, { backgroundColor: theme.gray200 }]}
             onPress={() => handleUpdateQuantity(item.productId, item.quantity - 1)}
@@ -264,7 +264,7 @@ export default function SalesScreen() {
             style={[styles.miniQuantityButton, { backgroundColor: theme.primary }]}
             onPress={() => handleUpdateQuantity(item.productId, item.quantity + 1)}
           >
-            <Ionicons name="add" size={16} color="#fff" />
+            <Ionicons name="add" size={16} color={theme.white} />
           </TouchableOpacity>
         </View>
 
@@ -488,7 +488,7 @@ export default function SalesScreen() {
         <View style={[styles.floatingCartBar, { backgroundColor: theme.cardBg, borderTopColor: theme.border }]}>
           <View style={styles.cartBarInfo}>
             <View style={[styles.cartIconBadge, { backgroundColor: theme.primary }]}>
-              <Text style={styles.cartIconText}>{getItemCount()}</Text>
+              <Text style={[styles.cartIconText, { color: theme.white }]}>{getItemCount()}</Text>
             </View>
             <View>
               <Text style={[styles.cartBarLabel, { color: theme.gray500 }]}>Total</Text>
@@ -570,7 +570,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#FEF3C7',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: BorderRadius.sm,
@@ -666,7 +665,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cartIconText: {
-    color: '#fff',
     fontWeight: '700',
     fontSize: Typography.sizes.sm,
   },
@@ -740,7 +738,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    backgroundColor: '#F3F4F6', // Light gray background for controls
     padding: 4,
     borderRadius: BorderRadius.full,
   },

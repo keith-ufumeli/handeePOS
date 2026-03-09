@@ -113,7 +113,7 @@ export default function HomeScreen() {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingScreen}>
-          <View style={styles.loadingIconContainer}>
+          <View style={[styles.loadingIconContainer, { backgroundColor: theme.infoBg }]}>
             <Ionicons name="storefront" size={64} color={theme.primary} />
           </View>
           <ActivityIndicator size="large" color={theme.primary} style={styles.loadingSpinner} />
@@ -148,10 +148,10 @@ export default function HomeScreen() {
           <View style={styles.headerContent}>
             <View>
               <Text style={styles.greetingText}>{getGreeting()},</Text>
-              <Text style={styles.userNameText}>{user?.fullName || 'User'}</Text>
+              <Text style={[styles.userNameText, { color: theme.white }]}>{user?.fullName || 'User'}</Text>
             </View>
             <View style={styles.headerIcon}>
-              <Ionicons name="notifications-outline" size={24} color="#FFF" />
+              <Ionicons name="notifications-outline" size={24} color={theme.white} />
             </View>
           </View>
           
@@ -159,7 +159,7 @@ export default function HomeScreen() {
           <View style={styles.summaryContainer}>
             <View style={styles.summaryRow}>
               <Card style={styles.summaryCard} padding="md">
-                <View style={styles.summaryIconBg}>
+                <View style={[styles.summaryIconBg, { backgroundColor: theme.successBg }]}>
                   <Ionicons name="cash-outline" size={20} color={theme.success} />
                 </View>
                 <Text style={[styles.summaryLabel, { color: theme.gray500 }]}>Total Sales</Text>
@@ -189,8 +189,8 @@ export default function HomeScreen() {
               onPress={() => router.push('/(tabs)/sales')}
               activeOpacity={0.8}
             >
-              <Ionicons name="cart" size={24} color="#FFF" />
-              <Text style={styles.actionButtonText}>New Sale</Text>
+              <Ionicons name="cart" size={24} color={theme.white} />
+              <Text style={[styles.actionButtonText, { color: theme.white }]}>New Sale</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
@@ -319,7 +319,6 @@ const styles = StyleSheet.create({
   },
   userNameText: {
     fontSize: Typography.sizes.xxl,
-    color: '#FFF',
     fontWeight: '700',
   },
   headerIcon: {
@@ -345,7 +344,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#D1FAE5', // Light green
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.sm,
@@ -386,7 +384,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     fontSize: Typography.sizes.sm,
     fontWeight: '600',
-    color: '#FFF',
   },
   section: {
     marginBottom: Spacing.xl,
@@ -478,7 +475,6 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#E0E7FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.xl,

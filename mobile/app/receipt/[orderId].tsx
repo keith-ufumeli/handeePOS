@@ -10,13 +10,17 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useOrderStore } from '../../src/stores/orderStore';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
+import { Order } from '../../src/database/types';
 import { ReceiptService, ReceiptData } from '../../src/services/receiptService';
-import Order from '../../src/database/models/Order';
+import { useOrderStore } from '../../src/stores/orderStore';
 
 export default function ReceiptScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const { getOrderById } = useOrderStore();
   
   const [order, setOrder] = useState<Order | null>(null);
@@ -71,7 +75,7 @@ export default function ReceiptScreen() {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading receipt...</Text>
       </View>
     );
