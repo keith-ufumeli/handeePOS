@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,7 +25,7 @@ interface MenuOption {
 
 export default function MoreScreen() {
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
 
   const menuOptions: MenuOption[] = [
     {
@@ -55,6 +56,28 @@ export default function MoreScreen() {
 
   const handleOptionPress = (route: string) => {
     router.push(route as any);
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            router.replace('/(auth)/login');
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   return (
@@ -101,6 +124,20 @@ export default function MoreScreen() {
               <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
             </TouchableOpacity>
           ))}
+        </View>
+
+        {/* Logout Button */}
+        <View style={styles.logoutSection}>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={handleLogout}
+            activeOpacity={0.7}
+          >
+            <View style={styles.logoutIconContainer}>
+              <Ionicons name="log-out" size={24} color="#FF3B30" />
+            </View>
+            <ThemedText style={styles.logoutText}>Logout</ThemedText>
+          </TouchableOpacity>
         </View>
 
         {/* App Info */}
@@ -221,6 +258,36 @@ const styles = StyleSheet.create({
   appInfoSubtext: {
     fontSize: 12,
     opacity: 0.4,
+  },
+  logoutSection: {
+    paddingHorizontal: 20,
+    marginBottom: 40,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  logoutIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FF3B3015',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  logoutText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FF3B30',
   },
 });
 

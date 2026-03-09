@@ -11,7 +11,7 @@ import {
   RefreshControl,
   ActivityIndicator
 } from 'react-native';
-import { useRouter } from 'expo-router';
+
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -66,8 +66,7 @@ interface StoreSettings {
 }
 
 export default function SettingsScreen() {
-  const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
   const {
     storeSettings,
     loading,
@@ -101,27 +100,6 @@ export default function SettingsScreen() {
     setEditedSettings({});
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-            router.replace('/(auth)/login');
-          },
-        },
-      ],
-      { cancelable: true }
-    );
-  };
 
   const handleFieldChange = (field: string, value: any) => {
     setEditedSettings(prev => ({
@@ -664,10 +642,7 @@ export default function SettingsScreen() {
                 <Text style={styles.profileRole}>{user?.role || 'Staff'}</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={20} color="#fff" />
-              <Text style={styles.logoutButtonText}>Logout</Text>
-            </TouchableOpacity>
+
           </View>
         </View>
 
@@ -938,19 +913,5 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textTransform: 'capitalize',
   },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FF3B30',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    gap: 8,
-  },
-  logoutButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+
 });

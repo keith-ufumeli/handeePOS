@@ -43,6 +43,7 @@ export default function ProductsScreen() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [isCategoriesExpanded, setIsCategoriesExpanded] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -129,46 +130,69 @@ export default function ProductsScreen() {
     </Card>
   );
 
-  const renderCategoryFilter = () => (
-    <View style={[styles.filterContainer, { backgroundColor: theme.cardBg, borderBottomColor: theme.border }]}>
-      <Text style={[styles.filterLabel, { color: theme.text }]}>Category:</Text>
-      <View style={styles.categoryChips}>
-        <TouchableOpacity
-          style={[
-            styles.categoryChip,
-            { backgroundColor: !filters.category ? theme.primary : theme.gray200, borderColor: !filters.category ? theme.primary : theme.border },
-          ]}
-          onPress={() => handleFilterChange({ category: undefined })}
+  const renderCategoryFilter = () => {
+    const hasActiveCategoryFilter = !!filters.category;
+    
+    return (
+      <View style={[styles.filterContainer, { backgroundColor: theme.cardBg, borderBottomColor: theme.border }]}>
+        <TouchableOpacity 
+          style={styles.categoryHeader} 
+          onPress={() => setIsCategoriesExpanded(!isCategoriesExpanded)}
+          activeOpacity={0.7}
         >
-          <Text style={[
-            styles.categoryChipText,
-            { color: !filters.category ? '#FFF' : theme.text },
-          ]}>
-            All
-          </Text>
+          <View style={styles.categoryHeaderLeft}>
+            <Text style={[styles.filterLabel, { color: theme.text }]}>Category</Text>
+            {!isCategoriesExpanded && hasActiveCategoryFilter && (
+              <View style={[styles.activeFilterDot, { backgroundColor: theme.primary }]} />
+            )}
+          </View>
+          <Ionicons 
+            name={isCategoriesExpanded ? "chevron-up" : "chevron-down"} 
+            size={20} 
+            color={theme.gray500} 
+          />
         </TouchableOpacity>
-        {categories.map((category) => {
-          const catId = category.serverId || category.id;
-          return (
-          <TouchableOpacity
-            key={category.id}
-            style={[
-              styles.categoryChip,
-              { backgroundColor: filters.category === catId ? theme.primary : theme.gray200, borderColor: filters.category === catId ? theme.primary : theme.border },
-            ]}
-            onPress={() => handleFilterChange({ category: catId })}
-          >
-            <Text style={[
-              styles.categoryChipText,
-              { color: filters.category === catId ? '#FFF' : theme.text },
-            ]}>
-              {category.name}
-            </Text>
-          </TouchableOpacity>
-        )})}
+        
+        {isCategoriesExpanded && (
+          <View style={styles.categoryChips}>
+            <TouchableOpacity
+              style={[
+                styles.categoryChip,
+                { backgroundColor: !filters.category ? theme.primary : theme.gray200, borderColor: !filters.category ? theme.primary : theme.border },
+              ]}
+              onPress={() => handleFilterChange({ category: undefined })}
+            >
+              <Text style={[
+                styles.categoryChipText,
+                { color: !filters.category ? '#FFF' : theme.text },
+              ]}>
+                All
+              </Text>
+            </TouchableOpacity>
+            {categories.map((category) => {
+              const catId = category.serverId || category.id;
+              return (
+              <TouchableOpacity
+                key={category.id}
+                style={[
+                  styles.categoryChip,
+                  { backgroundColor: filters.category === catId ? theme.primary : theme.gray200, borderColor: filters.category === catId ? theme.primary : theme.border },
+                ]}
+                onPress={() => handleFilterChange({ category: catId })}
+              >
+                <Text style={[
+                  styles.categoryChipText,
+                  { color: filters.category === catId ? '#FFF' : theme.text },
+                ]}>
+                  {category.name}
+                </Text>
+              </TouchableOpacity>
+            )})}
+          </View>
+        )}
       </View>
-    </View>
-  );
+    );
+  };
 
   // If not authenticated, AuthGuard will handle the redirect
   // Just show loading indicator during the brief redirect
@@ -320,19 +344,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   filterContainer: {
-    padding: Spacing.lg,
-    paddingTop: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.xs,
+  },
+  categoryHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   filterLabel: {
     fontSize: Typography.sizes.md,
     fontWeight: '600',
-    marginBottom: Spacing.sm,
+  },
+  activeFilterDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginLeft: Spacing.xs,
   },
   categoryChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   categoryChip: {
     paddingHorizontal: Spacing.md,
