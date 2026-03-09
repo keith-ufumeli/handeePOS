@@ -175,11 +175,13 @@ class SyncService {
           payload.syncVersion = localProduct[0].syncVersion;
         }
         const updateResponse = await apiService.put(`/api/products/${serverId}`, payload) as any;
-        if (updateResponse?.data?.syncVersion != null) {
-          await db.update(products)
-            .set({ syncVersion: updateResponse.data.syncVersion, syncStatus: 'synced', lastSyncedAt: Date.now() })
-            .where(eq(products.id, documentId));
-        }
+        await db.update(products)
+          .set({
+            syncStatus: 'synced',
+            lastSyncedAt: Date.now(),
+            ...(updateResponse?.data?.syncVersion != null ? { syncVersion: updateResponse.data.syncVersion } : {}),
+          })
+          .where(eq(products.id, documentId));
         break;
       }
       case 'delete':

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { StyleSheet, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '../../components/themed-view';
 import { ThemedText } from '../../components/themed-text';
@@ -48,6 +48,13 @@ export default function RegisterScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <View style={styles.logoContainer}>
+        <Image
+          source={require('../../assets/images/handeepos-logo-icon.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
+      </View>
       <ThemedText type="title" style={styles.title}>
         Create Account
       </ThemedText>
@@ -115,6 +122,14 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     justifyContent: 'center',
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  logoImage: {
+    width: 140,
+    height: 140,
   },
   title: {
     marginBottom: 40,

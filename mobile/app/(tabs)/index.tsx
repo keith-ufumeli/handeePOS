@@ -482,8 +482,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   loadingLogo: {
-    width: 140,
-    height: 140,
+    width: 200,
+    height: 200,
   },
   loadingSpinner: {
     marginBottom: Spacing.xl,

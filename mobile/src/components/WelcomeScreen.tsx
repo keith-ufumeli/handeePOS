@@ -44,7 +44,7 @@ export default function WelcomeScreen() {
         {/* App Icon */}
         <View style={styles.logoContainer}>
           <Image
-            source={require('../../assets/images/handeepos-logo-icon.png')}
+            source={require('../../assets/images/logo-white.png')}
             style={styles.logoImage}
             contentFit="contain"
           />

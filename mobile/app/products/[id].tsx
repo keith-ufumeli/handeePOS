@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../src/stores/productStore';
 import { Product } from '../../src/database/types';
@@ -25,6 +26,14 @@ export default function ProductDetailScreen() {
     loadProduct();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Reload whenever the screen comes back into focus (e.g. after editing)
+  useFocusEffect(
+    useCallback(() => {
+      loadProduct();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id])
+  );
 
   const loadProduct = async () => {
     try {
