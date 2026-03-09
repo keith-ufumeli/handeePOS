@@ -29,6 +29,8 @@ const envFile = process.env['NODE_ENV'] === 'production' ? '.env.prod' : '.env.l
 dotenv.config({ path: envFile });
 
 const app = express();
+// Trust the reverse proxy (like Render or Vercel) to fix express-rate-limit validation errors
+app.set('trust proxy', 1);
 const PORT = parseInt(process.env['PORT'] || '3000', 10);
 
 // Middleware
@@ -102,7 +104,7 @@ const startServer = async () => {
   try {
     // Connect to MongoDB
     await connectDB();
-    
+
     // Start server
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 HandeePOS Backend running on port ${PORT}`);
