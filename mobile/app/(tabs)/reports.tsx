@@ -18,33 +18,6 @@ import { useAuthStore } from '../../src/stores/authStore';
 
 const { width } = Dimensions.get('window');
 
-interface DailySummary {
-  date: string;
-  summary: {
-    totalSales: number;
-    totalOrders: number;
-    totalItems: number;
-    averageOrderValue: number;
-    cashSales: number;
-    cardSales: number;
-    mobileMoneySales: number;
-  };
-  hourlyBreakdown: {
-    _id: number;
-    sales: number;
-    orders: number;
-  }[];
-  topProducts: {
-    _id: {
-      productId: string;
-      productName: string;
-      sku: string;
-    };
-    totalQuantity: number;
-    totalRevenue: number;
-  }[];
-}
-
 export default function ReportsScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -87,7 +60,7 @@ export default function ReportsScreen() {
   const renderOverviewTab = () => {
     if (!dailySummary) return null;
 
-    const { summary, hourlyBreakdown, topProducts } = dailySummary;
+    const { summary, topProducts } = dailySummary;
 
     return (
       <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
@@ -131,21 +104,21 @@ export default function ReportsScreen() {
           <Text style={styles.sectionTitle}>Payment Methods</Text>
           <View style={styles.paymentMethods}>
             <View style={styles.paymentMethod}>
-              <View style={[styles.paymentIcon, { backgroundColor: theme.primary }]}>
+              <View style={[styles.paymentIcon, { backgroundColor: getPaymentMethodColor('cash') }]}>
                 <Ionicons name="cash" size={20} color={theme.white} />
               </View>
               <Text style={styles.paymentLabel}>Cash</Text>
               <Text style={styles.paymentAmount}>{formatCurrency(summary.cashSales)}</Text>
             </View>
             <View style={styles.paymentMethod}>
-              <View style={[styles.paymentIcon, { backgroundColor: theme.accent }]}>
+              <View style={[styles.paymentIcon, { backgroundColor: getPaymentMethodColor('card') }]}>
                 <Ionicons name="card" size={20} color={theme.white} />
               </View>
               <Text style={styles.paymentLabel}>Card</Text>
               <Text style={styles.paymentAmount}>{formatCurrency(summary.cardSales)}</Text>
             </View>
             <View style={styles.paymentMethod}>
-              <View style={[styles.paymentIcon, { backgroundColor: theme.primaryVariant }]}>
+              <View style={[styles.paymentIcon, { backgroundColor: getPaymentMethodColor('mobile_money') }]}>
                 <Ionicons name="phone-portrait" size={20} color={theme.white} />
               </View>
               <Text style={styles.paymentLabel}>Mobile Money</Text>
