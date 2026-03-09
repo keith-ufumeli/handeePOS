@@ -42,7 +42,7 @@ export default function WelcomeScreen() {
     >
       <View style={styles.content}>
         {/* App Icon */}
-        <View style={styles.iconContainer}>
+        <View style={styles.logoContainer}>
           <Image
             source={require('../../assets/images/handeepos-logo-icon.png')}
             style={styles.logoImage}
@@ -145,18 +145,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: Spacing.xl,
   },
-  iconContainer: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  logoContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.xl,
   },
   logoImage: {
-    width: 100,
-    height: 100,
+    width: 200,
+    height: 200,
   },
   appName: {
     fontSize: Typography.sizes.xxxl,

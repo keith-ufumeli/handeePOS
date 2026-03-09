@@ -114,7 +114,7 @@ export default function HomeScreen() {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingScreen}>
-          <View style={[styles.loadingIconContainer, { backgroundColor: theme.infoBg }]}>
+          <View style={styles.loadingLogoContainer}>
             <Image
               source={require('../../assets/images/handeepos-logo-icon.png')}
               style={styles.loadingLogo}
@@ -476,17 +476,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loadingIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  loadingLogoContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.xl,
   },
   loadingLogo: {
-    width: 56,
-    height: 56,
+    width: 140,
+    height: 140,
   },
   loadingSpinner: {
     marginBottom: Spacing.xl,

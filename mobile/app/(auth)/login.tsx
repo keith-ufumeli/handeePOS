@@ -129,7 +129,7 @@ export default function LoginScreen() {
         <ThemedView style={styles.container}>
           <View style={styles.logoContainer}>
             <Image
-              source={require('../../assets/images/handeepos-logo-icon.png')}
+              source={require('../../assets/images/handeepos-logo-full.png')}
               style={styles.logoImage}
               resizeMode="contain"
             />
@@ -147,7 +147,7 @@ export default function LoginScreen() {
       <ThemedView style={styles.container}>
         <View style={styles.logoContainer}>
           <Image
-            source={require('../../assets/images/handeepos-logo-icon.png')}
+            source={require('../../assets/images/handeepos-logo-full.png')}
             style={styles.logoImage}
             resizeMode="contain"
           />
@@ -365,8 +365,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   logoImage: {
-    width: 80,
-    height: 80,
+    width: 140,
+    height: 140,
   },
   title: {
     marginBottom: 24,
