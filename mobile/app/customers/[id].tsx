@@ -171,7 +171,7 @@ export default function CustomerDetailScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Customer</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{customer.name}</Text>
         <TouchableOpacity onPress={handleEdit} disabled={storeLoading}>
           <Text style={styles.editButton}>Edit</Text>
         </TouchableOpacity>
@@ -274,9 +274,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e0e0e0',
   },
   headerTitle: {
-    fontSize: 18,
+    flex: 1,
+    fontSize: 17,
     fontWeight: '600',
     color: '#333',
+    textAlign: 'center',
+    marginHorizontal: 8,
   },
   editButton: {
     fontSize: 16,

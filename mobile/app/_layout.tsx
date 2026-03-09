@@ -27,11 +27,18 @@ export default function RootLayout() {
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          {/* Screens with custom JSX headers — suppress native header */}
+          <Stack.Screen name="products/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="products/new" options={{ headerShown: false }} />
+          <Stack.Screen name="products/[id]/edit" options={{ headerShown: false }} />
+          <Stack.Screen name="customers/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="customers/new" options={{ headerShown: false }} />
+          <Stack.Screen name="customers/[id]/edit" options={{ headerShown: false }} />
+          <Stack.Screen name="categories" options={{ headerShown: false }} />
+          <Stack.Screen name="receipt/[orderId]" options={{ headerShown: false }} />
+          {/* Screens that use the native Stack header */}
           <Stack.Screen name="barcode-scanner" options={{ presentation: 'modal', title: 'Scan Barcode' }} />
-          <Stack.Screen name="products/[id]" options={{ title: 'Product Details' }} />
-          <Stack.Screen name="products/new" options={{ title: 'New Product' }} />
-          <Stack.Screen name="receipt/[orderId]" options={{ title: 'Receipt' }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Info' }} />
         </Stack>
         <AuthToast />
         <StatusBar style="auto" />

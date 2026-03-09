@@ -122,7 +122,7 @@ export default function ProductDetailScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Product Details</Text>
+        <Text style={styles.title} numberOfLines={1}>{product.name}</Text>
         <TouchableOpacity onPress={handleEdit}>
           <Text style={styles.editButton}>Edit</Text>
         </TouchableOpacity>
@@ -279,9 +279,12 @@ const styles = StyleSheet.create({
     color: '#007AFF',
   },
   title: {
-    fontSize: 18,
+    flex: 1,
+    fontSize: 17,
     fontWeight: '600',
     color: '#333',
+    textAlign: 'center',
+    marginHorizontal: 8,
   },
   editButton: {
     fontSize: 16,
