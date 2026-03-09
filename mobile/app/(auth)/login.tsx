@@ -6,6 +6,7 @@ import {
   View,
   FlatList,
   Modal,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -126,6 +127,13 @@ export default function LoginScreen() {
     if (!loadingKnownUsers && knownUsers.length === 0 && !user) {
       return (
         <ThemedView style={styles.container}>
+          <View style={styles.logoContainer}>
+            <Image
+              source={require('../../assets/images/handeepos-logo-icon.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
           <ThemedText type="title" style={styles.title}>Offline Sign In</ThemedText>
           <ThemedText style={[styles.offlineInfo, { color: theme.gray500 }]}>
             This device hasn&apos;t been set up for your account yet.
@@ -137,6 +145,13 @@ export default function LoginScreen() {
 
     return (
       <ThemedView style={styles.container}>
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../../assets/images/handeepos-logo-icon.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
+        </View>
         <ThemedText type="title" style={styles.title}>
           Offline Sign In
         </ThemedText>
@@ -258,6 +273,13 @@ export default function LoginScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <View style={styles.logoContainer}>
+        <Image
+          source={require('../../assets/images/handeepos-logo-icon.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
+      </View>
       <ThemedText type="title" style={styles.title}>
         Welcome Back
       </ThemedText>
@@ -337,6 +359,14 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     justifyContent: 'center',
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  logoImage: {
+    width: 80,
+    height: 80,
   },
   title: {
     marginBottom: 24,

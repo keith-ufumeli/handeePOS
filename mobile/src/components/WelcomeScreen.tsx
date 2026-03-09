@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useNetInfo } from '@react-native-community/netinfo';
@@ -42,7 +43,11 @@ export default function WelcomeScreen() {
       <View style={styles.content}>
         {/* App Icon */}
         <View style={styles.iconContainer}>
-          <Ionicons name="storefront" size={80} color={theme.white} />
+          <Image
+            source={require('../../assets/images/handeepos-logo-icon.png')}
+            style={styles.logoImage}
+            contentFit="contain"
+          />
         </View>
 
         {/* App Name */}
@@ -148,6 +153,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.xl,
+  },
+  logoImage: {
+    width: 100,
+    height: 100,
   },
   appName: {
     fontSize: Typography.sizes.xxxl,

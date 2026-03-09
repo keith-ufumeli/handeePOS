@@ -546,13 +546,13 @@ export class ReportController {
       const storeOid = new mongoose.Types.ObjectId(storeId);
 
       // Date range: default last 30 days
-      const endDate = req.query.endDate
-        ? new Date(req.query.endDate as string)
+      const endDate = req.query['endDate']
+        ? new Date(req.query['endDate'] as string)
         : new Date();
       endDate.setHours(23, 59, 59, 999);
 
-      const startDate = req.query.startDate
-        ? new Date(req.query.startDate as string)
+      const startDate = req.query['startDate']
+        ? new Date(req.query['startDate'] as string)
         : (() => { const d = new Date(endDate); d.setDate(d.getDate() - 30); return d; })();
 
       let csvContent = '';

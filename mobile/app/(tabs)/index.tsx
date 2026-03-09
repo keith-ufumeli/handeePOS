@@ -8,6 +8,7 @@ import {
   RefreshControl,
   StatusBar,
   Text,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -114,7 +115,11 @@ export default function HomeScreen() {
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingScreen}>
           <View style={[styles.loadingIconContainer, { backgroundColor: theme.infoBg }]}>
-            <Ionicons name="storefront" size={64} color={theme.primary} />
+            <Image
+              source={require('../../assets/images/handeepos-logo-icon.png')}
+              style={styles.loadingLogo}
+              resizeMode="contain"
+            />
           </View>
           <ActivityIndicator size="large" color={theme.primary} style={styles.loadingSpinner} />
           <Text style={[styles.loadingTitle, { color: theme.text }]}>
@@ -478,6 +483,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.xl,
+  },
+  loadingLogo: {
+    width: 56,
+    height: 56,
   },
   loadingSpinner: {
     marginBottom: Spacing.xl,

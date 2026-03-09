@@ -21,6 +21,7 @@ import { Colors } from '../../constants/theme';
 import { useColorScheme } from '../../hooks/use-color-scheme';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import { useAuthStore } from '../../src/stores/authStore';
+import NetInfo from '@react-native-community/netinfo';
 
 // ─── Picker options ──────────────────────────────────────────────────────────
 
@@ -239,10 +240,13 @@ export default function SettingsScreen() {
   const {
     storeSettings,
     loading,
+    saving,
     refreshing,
+    hasPendingChanges,
     fetchStoreSettings,
     updateStoreSettings,
-    refreshSettings
+    syncPendingChanges,
+    refreshSettings,
   } = useSettingsStore();
 
   const [activeSection, setActiveSection] = useState<'general' | 'receipt' | 'tax' | 'hours' | 'features'>('general');
@@ -258,12 +262,26 @@ export default function SettingsScreen() {
     fetchStoreSettings();
   }, [fetchStoreSettings]);
 
+  // Auto-sync pending changes when network becomes available
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      if (state.isConnected && hasPendingChanges) {
+        syncPendingChanges();
+      }
+    });
+    return unsubscribe;
+  }, [hasPendingChanges, syncPendingChanges]);
+
   const handleSave = async () => {
     try {
-      await updateStoreSettings(editedSettings);
+      const result = await updateStoreSettings(editedSettings);
       setIsEditing(false);
       setEditedSettings({});
-      Alert.alert('Success', 'Settings updated successfully');
+      if (result === 'queued') {
+        Alert.alert('Saved Locally', 'Changes saved on this device and will sync when you reconnect.');
+      } else {
+        Alert.alert('Success', 'Settings updated successfully');
+      }
     } catch {
       Alert.alert('Error', 'Failed to update settings');
     }
@@ -796,8 +814,12 @@ export default function SettingsScreen() {
               <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                <Text style={styles.saveButtonText}>Save</Text>
+              <TouchableOpacity
+                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                onPress={handleSave}
+                disabled={saving}
+              >
+                <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Save'}</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -827,6 +849,13 @@ export default function SettingsScreen() {
           ))}
         </ScrollView>
       </View>
+
+      {hasPendingChanges && (
+        <View style={styles.pendingBanner}>
+          <Ionicons name="cloud-upload-outline" size={16} color="#92400E" />
+          <Text style={styles.pendingBannerText}>Changes pending sync</Text>
+        </View>
+      )}
 
       <ScrollView
         style={styles.content}
@@ -1121,6 +1150,25 @@ function createStyles(theme: typeof Colors.light) {
     fontSize: 13,
     color: theme.gray400,
     textTransform: 'capitalize',
+  },
+  pendingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FCD34D',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  pendingBannerText: {
+    fontSize: 13,
+    color: '#92400E',
+    fontWeight: '500',
+    flex: 1,
+  },
+  saveButtonDisabled: {
+    backgroundColor: theme.gray300,
   },
   });
 }
