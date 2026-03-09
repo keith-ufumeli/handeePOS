@@ -44,7 +44,7 @@
         "expo-build-properties",
         {
           "android": {
-            "kotlinVersion": "1.6.10",
+            "kotlinVersion": "2.1.0",
             "packagingOptions": {
               "pickFirst": [
                 "**/libc++_shared.so"
@@ -58,6 +58,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e0bd2461-2bb8-428b-8da7-0cc5bf17694b"
+      }
     }
   }
 }
