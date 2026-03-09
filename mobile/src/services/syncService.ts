@@ -136,7 +136,16 @@ class SyncService {
 
     switch (operation) {
       case 'create':
-        const createResponse = await apiService.post('/api/products', data) as any;
+        // Dynamically resolve categoryId string UUID to the mongo serverId
+        const payloadCreate = { ...data };
+        if (payloadCreate.categoryId) {
+          const catCreate = await db.select().from(categories).where(eq(categories.id, payloadCreate.categoryId)).limit(1);
+          if (catCreate.length > 0 && catCreate[0].serverId) {
+            payloadCreate.categoryId = catCreate[0].serverId;
+          }
+        }
+
+        const createResponse = await apiService.post('/api/products', payloadCreate) as any;
 
         // Update local product with serverId
         if (createResponse && (createResponse.id || createResponse._id)) {
@@ -154,6 +163,15 @@ class SyncService {
         if (!serverId) throw new Error('Cannot update product: Missing serverId');
         const localProduct = await db.select().from(products).where(eq(products.id, documentId)).limit(1);
         const payload = { ...data };
+
+        // Dynamically resolve categoryId string UUID to the mongo serverId
+        if (payload.categoryId) {
+          const catUpdate = await db.select().from(categories).where(eq(categories.id, payload.categoryId)).limit(1);
+          if (catUpdate.length > 0 && catUpdate[0].serverId) {
+            payload.categoryId = catUpdate[0].serverId;
+          }
+        }
+
         if (localProduct.length > 0 && localProduct[0].syncVersion != null) {
           payload.syncVersion = localProduct[0].syncVersion;
         }
