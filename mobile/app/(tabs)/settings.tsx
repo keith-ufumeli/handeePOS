@@ -340,7 +340,7 @@ export default function SettingsScreen() {
     const settings = { ...storeSettings, ...editedSettings };
 
     return (
-      <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.sectionContent}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Store Information</Text>
 
@@ -441,7 +441,7 @@ export default function SettingsScreen() {
             />
           </View>
         </View>
-      </ScrollView>
+      </View>
     );
   };
 
@@ -450,7 +450,7 @@ export default function SettingsScreen() {
     const receiptSettings = { ...storeSettings.receiptSettings, ...editedSettings.receiptSettings };
 
     return (
-      <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.sectionContent}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Receipt Header & Footer</Text>
 
@@ -532,7 +532,7 @@ export default function SettingsScreen() {
             pickerType="fontSize"
           />
         </View>
-      </ScrollView>
+      </View>
     );
   };
 
@@ -541,7 +541,7 @@ export default function SettingsScreen() {
     const taxSettings = { ...storeSettings.taxSettings, ...editedSettings.taxSettings };
 
     return (
-      <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.sectionContent}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Tax Configuration</Text>
 
@@ -597,18 +597,18 @@ export default function SettingsScreen() {
             />
           </View>
         </View>
-      </ScrollView>
+      </View>
     );
   };
 
   const renderBusinessHours = () => {
     if (!storeSettings) return null;
     const settings = { ...storeSettings, ...editedSettings };
-    const businessHours = settings.businessHours || storeSettings.businessHours;
+    const businessHours = settings.businessHours || storeSettings.businessHours || {};
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
     return (
-      <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.sectionContent}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Business Hours</Text>
 
@@ -621,7 +621,7 @@ export default function SettingsScreen() {
                   <Switch
                     value={dayHours.isOpen}
                     onValueChange={(v) => {
-                      const newHours = { ...businessHours, [day]: { ...dayHours, isOpen: v } };
+                      const newHours = { ...(businessHours || {}), [day]: { ...dayHours, isOpen: v } };
                       handleFieldChange('businessHours', newHours);
                     }}
                     disabled={!isEditing}
@@ -636,7 +636,7 @@ export default function SettingsScreen() {
                         style={styles.timeInputField}
                         value={dayHours.openTime}
                         onChangeText={(v) => {
-                          const newHours = { ...businessHours, [day]: { ...dayHours, openTime: v } };
+                          const newHours = { ...(businessHours || {}), [day]: { ...dayHours, openTime: v } };
                           handleFieldChange('businessHours', newHours);
                         }}
                         editable={isEditing}
@@ -649,7 +649,7 @@ export default function SettingsScreen() {
                         style={styles.timeInputField}
                         value={dayHours.closeTime}
                         onChangeText={(v) => {
-                          const newHours = { ...businessHours, [day]: { ...dayHours, closeTime: v } };
+                          const newHours = { ...(businessHours || {}), [day]: { ...dayHours, closeTime: v } };
                           handleFieldChange('businessHours', newHours);
                         }}
                         editable={isEditing}
@@ -662,7 +662,7 @@ export default function SettingsScreen() {
                         style={styles.timeInputField}
                         value={dayHours.breakStart || ''}
                         onChangeText={(v) => {
-                          const newHours = { ...businessHours, [day]: { ...dayHours, breakStart: v || undefined } };
+                          const newHours = { ...(businessHours || {}), [day]: { ...dayHours, breakStart: v || undefined } };
                           handleFieldChange('businessHours', newHours);
                         }}
                         editable={isEditing}
@@ -675,7 +675,7 @@ export default function SettingsScreen() {
                         style={styles.timeInputField}
                         value={dayHours.breakEnd || ''}
                         onChangeText={(v) => {
-                          const newHours = { ...businessHours, [day]: { ...dayHours, breakEnd: v || undefined } };
+                          const newHours = { ...(businessHours || {}), [day]: { ...dayHours, breakEnd: v || undefined } };
                           handleFieldChange('businessHours', newHours);
                         }}
                         editable={isEditing}
@@ -688,7 +688,7 @@ export default function SettingsScreen() {
             );
           })}
         </View>
-      </ScrollView>
+      </View>
     );
   };
 
@@ -698,7 +698,7 @@ export default function SettingsScreen() {
     const features = settings.features || storeSettings.features;
 
     return (
-      <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.sectionContent}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Feature Toggles</Text>
 
@@ -721,7 +721,7 @@ export default function SettingsScreen() {
             </View>
           ))}
         </View>
-      </ScrollView>
+      </View>
     );
   };
 
