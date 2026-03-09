@@ -698,6 +698,27 @@ class ApiService {
     });
   }
 
+  /**
+   * Returns the raw fetch Response with auth headers applied.
+   * Use this for endpoints that return non-JSON content (e.g. CSV exports).
+   * Unlike makeRequest, this does not perform automatic token refresh on 401.
+   */
+  async getRaw(endpoint: string): Promise<Response> {
+    await this.ensureTokenRestored();
+    if (!this.authToken) {
+      await this.restoreToken();
+    }
+    if (!this.authToken) {
+      throw new Error('Cannot make authenticated request without auth token. Please log in again.');
+    }
+    const url = `${this.baseUrl}${endpoint}`;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.authToken}`,
+    };
+    console.log('[API_SERVICE] getRaw request', { url });
+    return fetch(url, { headers });
+  }
+
   // Customer endpoints
   async getCustomers(params: {
     search?: string;

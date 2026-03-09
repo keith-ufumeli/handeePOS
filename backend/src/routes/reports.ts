@@ -50,4 +50,7 @@ router.get('/inventory', ReportController.getInventoryValuation as any);
 // Customer analytics
 router.get('/customers', ReportController.getCustomerAnalytics as any);
 
+// Export report (CSV or JSON)
+router.get('/export', ReportController.exportReport as any);
+
 export default router;

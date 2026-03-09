@@ -35,6 +35,7 @@ export default function RootLayout() {
           <Stack.Screen name="customers/new" options={{ headerShown: false }} />
           <Stack.Screen name="customers/[id]/edit" options={{ headerShown: false }} />
           <Stack.Screen name="categories" options={{ headerShown: false }} />
+          <Stack.Screen name="reports" options={{ headerShown: false }} />
           <Stack.Screen name="receipt/[orderId]" options={{ headerShown: false }} />
           {/* Screens that use the native Stack header */}
           <Stack.Screen name="barcode-scanner" options={{ presentation: 'modal', title: 'Scan Barcode' }} />

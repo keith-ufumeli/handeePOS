@@ -7,6 +7,25 @@ import { sendSuccess, sendError } from '@/utils/response';
 import logger from '@/utils/logger';
 import { TokenPayload } from '@/services/authService';
 
+// ─── CSV helpers ─────────────────────────────────────────────────────────────
+
+function escapeCsvValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function buildCsv(headers: string[], rows: Record<string, unknown>[]): string {
+  const headerLine = headers.map(escapeCsvValue).join(',');
+  const dataLines = rows.map(row =>
+    headers.map(h => escapeCsvValue(row[h])).join(',')
+  );
+  return [headerLine, ...dataLines].join('\n');
+}
+
 interface AuthenticatedRequest extends Omit<Request, 'user'> {
   user: TokenPayload;
 }
@@ -495,6 +514,206 @@ export class ReportController {
     } catch (error) {
       logger.error('Error fetching inventory valuation:', error);
       sendError(res, 'Failed to fetch inventory valuation', 500);
+    }
+  }
+
+  /**
+   * Export a report as CSV or JSON.
+   * Query params:
+   *   type    – 'sales' | 'products' | 'inventory' | 'customers' | 'daily-summary'
+   *   format  – 'csv' (default) | 'json'
+   *   startDate, endDate – ISO date strings (optional; defaults to last 30 days)
+   *   groupBy – 'hour' | 'day' | 'week' | 'month'  (sales report only)
+   *   sortBy  – 'sales' | 'revenue'                 (products report only)
+   *   limit   – number                              (products report only)
+   */
+  static async exportReport(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const {
+        type = 'sales',
+        format = 'csv',
+        groupBy = 'day',
+        sortBy = 'sales',
+        limit = '100',
+      } = req.query as Record<string, string>;
+
+      const storeId = req.user?.storeId;
+      if (!storeId || !/^[0-9a-fA-F]{24}$/.test(storeId)) {
+        sendError(res, 'Invalid store ID', 400);
+        return;
+      }
+
+      const storeOid = new mongoose.Types.ObjectId(storeId);
+
+      // Date range: default last 30 days
+      const endDate = req.query.endDate
+        ? new Date(req.query.endDate as string)
+        : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const startDate = req.query.startDate
+        ? new Date(req.query.startDate as string)
+        : (() => { const d = new Date(endDate); d.setDate(d.getDate() - 30); return d; })();
+
+      let csvContent = '';
+      let rows: Record<string, unknown>[] = [];
+      let headers: string[] = [];
+      let filename = `handeepos-${type}-${new Date().toISOString().split('T')[0]}`;
+
+      // ── Sales report ────────────────────────────────────────────────────────
+      if (type === 'sales') {
+        filename += `-${groupBy}`;
+        let groupFormat: Record<string, unknown>;
+        switch (groupBy) {
+          case 'hour':
+            groupFormat = { year: { $year: '$completedAt' }, month: { $month: '$completedAt' }, day: { $dayOfMonth: '$completedAt' }, hour: { $hour: '$completedAt' } };
+            break;
+          case 'week':
+            groupFormat = { year: { $year: '$completedAt' }, week: { $week: '$completedAt' } };
+            break;
+          case 'month':
+            groupFormat = { year: { $year: '$completedAt' }, month: { $month: '$completedAt' } };
+            break;
+          default:
+            groupFormat = { year: { $year: '$completedAt' }, month: { $month: '$completedAt' }, day: { $dayOfMonth: '$completedAt' } };
+        }
+
+        const data = await Order.aggregate([
+          { $match: { storeId: storeOid, status: 'completed', completedAt: { $gte: startDate, $lte: endDate } } },
+          {
+            $group: {
+              _id: groupFormat,
+              totalSales: { $sum: '$total' },
+              totalOrders: { $sum: 1 },
+              totalItems: { $sum: { $reduce: { input: '$items', initialValue: 0, in: { $add: ['$$value', '$$this.quantity'] } } } },
+              averageOrderValue: { $avg: '$total' },
+            },
+          },
+          { $sort: { _id: 1 } },
+        ]);
+
+        headers = ['Period', 'Total Sales', 'Total Orders', 'Items Sold', 'Avg Order Value'];
+        rows = data.map(d => ({
+          Period: [d._id.year, d._id.month, d._id.day, d._id.hour !== undefined ? `H${d._id.hour}` : undefined].filter(Boolean).join('-'),
+          'Total Sales': d.totalSales.toFixed(2),
+          'Total Orders': d.totalOrders,
+          'Items Sold': d.totalItems,
+          'Avg Order Value': d.averageOrderValue.toFixed(2),
+        }));
+
+      // ── Products report ─────────────────────────────────────────────────────
+      } else if (type === 'products') {
+        const data = await Order.aggregate([
+          { $match: { storeId: storeOid, status: 'completed', completedAt: { $gte: startDate, $lte: endDate } } },
+          { $unwind: '$items' },
+          {
+            $group: {
+              _id: { productId: '$items.productId', productName: '$items.productName', sku: '$items.sku' },
+              totalQuantitySold: { $sum: '$items.quantity' },
+              totalRevenue: { $sum: '$items.subtotal' },
+              averagePrice: { $avg: '$items.unitPrice' },
+            },
+          },
+          { $sort: sortBy === 'revenue' ? { totalRevenue: -1 } : { totalQuantitySold: -1 } },
+          { $limit: Number(limit) },
+        ]);
+
+        headers = ['Product Name', 'SKU', 'Qty Sold', 'Total Revenue', 'Avg Price'];
+        rows = data.map(d => ({
+          'Product Name': d._id.productName,
+          SKU: d._id.sku,
+          'Qty Sold': d.totalQuantitySold,
+          'Total Revenue': d.totalRevenue.toFixed(2),
+          'Avg Price': d.averagePrice.toFixed(2),
+        }));
+
+      // ── Inventory report ────────────────────────────────────────────────────
+      } else if (type === 'inventory') {
+        const data = await Product.find(
+          { storeId: storeOid, isActive: true },
+          { name: 1, sku: 1, price: 1, cost: 1, stockQuantity: 1, lowStockThreshold: 1, unit: 1 }
+        ).lean();
+
+        headers = ['Name', 'SKU', 'Stock', 'Unit', 'Retail Price', 'Cost', 'Retail Value', 'Cost Value', 'Status'];
+        rows = (data as any[]).map(p => {
+          const retailValue = (p.price || 0) * (p.stockQuantity || 0);
+          const costValue = (p.cost || 0) * (p.stockQuantity || 0);
+          const status = p.stockQuantity <= 0 ? 'Out of Stock' : p.stockQuantity <= p.lowStockThreshold ? 'Low Stock' : 'In Stock';
+          return {
+            Name: p.name,
+            SKU: p.sku,
+            Stock: p.stockQuantity,
+            Unit: p.unit || 'pcs',
+            'Retail Price': (p.price || 0).toFixed(2),
+            Cost: (p.cost || 0).toFixed(2),
+            'Retail Value': retailValue.toFixed(2),
+            'Cost Value': costValue.toFixed(2),
+            Status: status,
+          };
+        });
+
+      // ── Customers report ────────────────────────────────────────────────────
+      } else if (type === 'customers') {
+        const data = await Customer.find(
+          { storeId: storeOid, isActive: true },
+          { name: 1, email: 1, phoneNumber: 1, totalSpent: 1, totalOrders: 1, loyaltyPoints: 1, tier: 1, lastVisit: 1, createdAt: 1 }
+        ).sort({ totalSpent: -1 }).lean();
+
+        headers = ['Name', 'Email', 'Phone', 'Tier', 'Total Spent', 'Total Orders', 'Loyalty Points', 'Last Visit', 'Member Since'];
+        rows = (data as any[]).map(c => ({
+          Name: c.name,
+          Email: c.email || '',
+          Phone: c.phoneNumber || '',
+          Tier: c.tier || 'bronze',
+          'Total Spent': (c.totalSpent || 0).toFixed(2),
+          'Total Orders': c.totalOrders || 0,
+          'Loyalty Points': c.loyaltyPoints || 0,
+          'Last Visit': c.lastVisit ? new Date(c.lastVisit).toISOString().split('T')[0] : '',
+          'Member Since': c.createdAt ? new Date(c.createdAt).toISOString().split('T')[0] : '',
+        }));
+
+      // ── Daily summary ───────────────────────────────────────────────────────
+      } else if (type === 'daily-summary') {
+        const data = await Order.aggregate([
+          { $match: { storeId: storeOid, status: 'completed', completedAt: { $gte: startDate, $lte: endDate } } },
+          {
+            $group: {
+              _id: { year: { $year: '$completedAt' }, month: { $month: '$completedAt' }, day: { $dayOfMonth: '$completedAt' } },
+              totalSales: { $sum: '$total' },
+              totalOrders: { $sum: 1 },
+              totalItems: { $sum: { $reduce: { input: '$items', initialValue: 0, in: { $add: ['$$value', '$$this.quantity'] } } } },
+              averageOrderValue: { $avg: '$total' },
+            },
+          },
+          { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } },
+        ]);
+
+        headers = ['Date', 'Total Sales', 'Total Orders', 'Items Sold', 'Avg Order Value'];
+        rows = data.map(d => ({
+          Date: `${d._id.year}-${String(d._id.month).padStart(2, '0')}-${String(d._id.day).padStart(2, '0')}`,
+          'Total Sales': d.totalSales.toFixed(2),
+          'Total Orders': d.totalOrders,
+          'Items Sold': d.totalItems,
+          'Avg Order Value': d.averageOrderValue.toFixed(2),
+        }));
+
+      } else {
+        sendError(res, `Unknown report type: ${type}`, 400);
+        return;
+      }
+
+      // ── Format & respond ────────────────────────────────────────────────────
+      if (format === 'csv') {
+        csvContent = buildCsv(headers, rows);
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}.csv"`);
+        res.status(200).send(csvContent);
+      } else {
+        sendSuccess(res, { filename, headers, rows, rowCount: rows.length });
+      }
+    } catch (error) {
+      logger.error('Error exporting report:', error);
+      sendError(res, 'Failed to export report', 500);
     }
   }
 

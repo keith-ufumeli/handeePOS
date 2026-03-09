@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import apiService from '../services/apiService';
 
 export interface DailySummary {
@@ -95,6 +97,17 @@ export interface CustomerAnalytics {
   newCustomers: number;
 }
 
+export type ExportReportType = 'sales' | 'products' | 'inventory' | 'customers' | 'daily-summary';
+export type ExportGroupBy = 'hour' | 'day' | 'week' | 'month';
+
+export interface ExportOptions {
+  type: ExportReportType;
+  startDate: string;
+  endDate: string;
+  groupBy?: ExportGroupBy;
+  sortBy?: 'sales' | 'revenue';
+}
+
 interface ReportStore {
   dailySummary: DailySummary | null;
   salesReport: SalesReport | null;
@@ -103,8 +116,9 @@ interface ReportStore {
   customerAnalytics: CustomerAnalytics | null;
   loading: boolean;
   refreshing: boolean;
+  exporting: boolean;
   error: string | null;
-  
+
   // Actions
   fetchDailySummary: (date?: string) => Promise<void>;
   fetchSalesReport: (startDate: string, endDate: string, groupBy?: string) => Promise<void>;
@@ -112,6 +126,7 @@ interface ReportStore {
   fetchInventoryValuation: () => Promise<void>;
   fetchCustomerAnalytics: (startDate?: string, endDate?: string) => Promise<void>;
   refreshReports: () => Promise<void>;
+  exportReport: (options: ExportOptions) => Promise<void>;
   clearError: () => void;
 }
 
@@ -123,6 +138,7 @@ export const useReportStore = create<ReportStore>((set, get) => ({
   customerAnalytics: null,
   loading: false,
   refreshing: false,
+  exporting: false,
   error: null,
 
   fetchDailySummary: async (date?: string) => {
@@ -259,6 +275,54 @@ export const useReportStore = create<ReportStore>((set, get) => ({
         error: error.message || 'Failed to refresh reports',
         refreshing: false 
       });
+    }
+  },
+
+  exportReport: async (options: ExportOptions) => {
+    const { type, startDate, endDate, groupBy, sortBy } = options;
+    set({ exporting: true, error: null });
+
+    try {
+      const params = new URLSearchParams({ type, format: 'csv', startDate, endDate });
+      if (groupBy) params.append('groupBy', groupBy);
+      if (sortBy) params.append('sortBy', sortBy);
+
+      // Fetch CSV content from backend (returns raw text via the auth token)
+      const response = await apiService.getRaw(`/api/reports/export?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`Export failed: ${response.status}`);
+      }
+      const csvText = await response.text();
+
+      // Write to a temporary file
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const filename = `handeepos-${type}-${dateStr}.csv`;
+      const cacheDir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? '';
+      const fileUri = `${cacheDir}${filename}`;
+      await FileSystem.writeAsStringAsync(fileUri, csvText, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      // Share / open with external app
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          dialogTitle: `Export ${type} report`,
+          UTI: 'public.comma-separated-values-text',
+        });
+      } else {
+        throw new Error('Sharing is not available on this device');
+      }
+
+      set({ exporting: false });
+    } catch (error: any) {
+      set({
+        error: error.message || 'Failed to export report',
+        exporting: false,
+      });
+      throw error;
     }
   },
 
