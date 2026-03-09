@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../src/stores/productStore';
 import { useAuthStore } from '../../src/stores/authStore';
 import { Product } from '../../src/database/types';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../constants/theme';
+import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import { useColorScheme } from '../../hooks/use-color-scheme';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -147,23 +147,25 @@ export default function ProductsScreen() {
             All
           </Text>
         </TouchableOpacity>
-        {categories.map((category) => (
+        {categories.map((category) => {
+          const catId = category.serverId || category.id;
+          return (
           <TouchableOpacity
             key={category.id}
             style={[
               styles.categoryChip,
-              { backgroundColor: filters.category === category.id ? theme.primary : theme.gray200, borderColor: filters.category === category.id ? theme.primary : theme.border },
+              { backgroundColor: filters.category === catId ? theme.primary : theme.gray200, borderColor: filters.category === catId ? theme.primary : theme.border },
             ]}
-            onPress={() => handleFilterChange({ category: category.id })}
+            onPress={() => handleFilterChange({ category: catId })}
           >
             <Text style={[
               styles.categoryChipText,
-              { color: filters.category === category.id ? '#FFF' : theme.text },
+              { color: filters.category === catId ? '#FFF' : theme.text },
             ]}>
               {category.name}
             </Text>
           </TouchableOpacity>
-        ))}
+        )})}
       </View>
     </View>
   );

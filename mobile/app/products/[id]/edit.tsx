@@ -343,7 +343,7 @@ export default function EditProductScreen() {
               { label: 'Select Category', value: '' },
               ...categories.map((category: Category) => ({
                 label: category.name,
-                value: category.id,
+                value: category.serverId || category.id,
               })),
             ],
             validationErrors.categoryId

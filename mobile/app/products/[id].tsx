@@ -16,20 +16,21 @@ import { Product } from '../../src/database/types';
 export default function ProductDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getProductById, updateProduct, deleteProduct, isLoading } = useProductStore();
+  const { categories, getProductById, updateProduct, deleteProduct } = useProductStore();
   
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadProduct();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const loadProduct = async () => {
     try {
       const productData = await getProductById(id);
       setProduct(productData);
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to load product');
     } finally {
       setLoading(false);
@@ -55,7 +56,7 @@ export default function ProductDetailScreen() {
               Alert.alert('Success', 'Product deleted successfully', [
                 { text: 'OK', onPress: () => router.back() },
               ]);
-            } catch (error) {
+            } catch {
               Alert.alert('Error', 'Failed to delete product');
             }
           },
@@ -143,7 +144,9 @@ export default function ProductDetailScreen() {
 
           <View style={styles.productRow}>
             <Text style={styles.label}>Category:</Text>
-            <Text style={styles.value}>{product.categoryId}</Text>
+            <Text style={styles.value}>
+              {categories.find(c => (c.serverId || c.id) === product.categoryId)?.name || product.categoryId}
+            </Text>
           </View>
 
           <View style={styles.priceRow}>

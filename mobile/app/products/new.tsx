@@ -12,7 +12,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../src/stores/productStore';
-import Category from '../../src/database/models/Category';
+import { Category } from '../../src/database/types';
 
 export default function NewProductScreen() {
   const router = useRouter();
@@ -236,7 +236,7 @@ export default function NewProductScreen() {
             { label: 'Select Category', value: '' },
             ...categories.map((category: Category) => ({
               label: category.name,
-              value: category.id,
+              value: category.serverId || category.id,
             })),
           ],
           validationErrors.categoryId
