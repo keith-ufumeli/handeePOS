@@ -37,6 +37,14 @@ export default function MoreScreen() {
       color: '#34C759',
     },
     {
+      id: 'categories',
+      title: 'Categories',
+      subtitle: 'Organise products into categories',
+      icon: 'pricetags',
+      route: '/categories',
+      color: '#AF52DE',
+    },
+    {
       id: 'reports',
       title: 'Reports',
       subtitle: 'View sales analytics and insights',

@@ -20,7 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.HandeePOS"
+      "package": "com.anonymous.handeepos"
     },
     "web": {
       "output": "static",

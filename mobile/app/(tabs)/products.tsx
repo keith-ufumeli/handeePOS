@@ -210,7 +210,12 @@ export default function ProductsScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
       <View style={[styles.header, { backgroundColor: theme.cardBg, borderBottomColor: theme.border }]}>
-        <Text style={[styles.title, { color: theme.text }]}>Products</Text>
+        <View>
+          <Text style={[styles.title, { color: theme.text }]}>Products</Text>
+          <Text style={[styles.counter, { color: theme.gray500 }]}>
+            {products.length} {products.length === 1 ? 'item' : 'items'}
+          </Text>
+        </View>
         <View style={styles.headerActions}>
           <Button 
             title="Sync" 
@@ -323,6 +328,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: Typography.sizes.xxl,
     fontWeight: '700',
+  },
+  counter: {
+    fontSize: Typography.sizes.sm,
+    marginTop: 2,
   },
   headerActions: {
     flexDirection: 'row',

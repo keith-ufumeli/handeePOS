@@ -9,12 +9,71 @@ import {
   TextInput,
   Alert,
   RefreshControl,
-  ActivityIndicator
+  ActivityIndicator,
+  Modal,
+  FlatList,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import { useAuthStore } from '../../src/stores/authStore';
+
+// ─── Picker options ──────────────────────────────────────────────────────────
+
+const CURRENCIES = [
+  { value: 'USD', label: 'USD – US Dollar' },
+  { value: 'EUR', label: 'EUR – Euro' },
+  { value: 'GBP', label: 'GBP – British Pound' },
+  { value: 'ZAR', label: 'ZAR – South African Rand' },
+  { value: 'KES', label: 'KES – Kenyan Shilling' },
+  { value: 'NGN', label: 'NGN – Nigerian Naira' },
+  { value: 'GHS', label: 'GHS – Ghanaian Cedi' },
+  { value: 'UGX', label: 'UGX – Ugandan Shilling' },
+  { value: 'TZS', label: 'TZS – Tanzanian Shilling' },
+  { value: 'AUD', label: 'AUD – Australian Dollar' },
+  { value: 'CAD', label: 'CAD – Canadian Dollar' },
+  { value: 'JPY', label: 'JPY – Japanese Yen' },
+  { value: 'CNY', label: 'CNY – Chinese Yuan' },
+  { value: 'INR', label: 'INR – Indian Rupee' },
+  { value: 'BRL', label: 'BRL – Brazilian Real' },
+];
+
+const TIMEZONES = [
+  { value: 'UTC', label: 'UTC' },
+  { value: 'America/New_York', label: 'America/New_York (EST/EDT)' },
+  { value: 'America/Chicago', label: 'America/Chicago (CST/CDT)' },
+  { value: 'America/Denver', label: 'America/Denver (MST/MDT)' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (PST/PDT)' },
+  { value: 'America/Sao_Paulo', label: 'America/Sao_Paulo' },
+  { value: 'Europe/London', label: 'Europe/London (GMT/BST)' },
+  { value: 'Europe/Paris', label: 'Europe/Paris (CET/CEST)' },
+  { value: 'Europe/Berlin', label: 'Europe/Berlin (CET/CEST)' },
+  { value: 'Africa/Johannesburg', label: 'Africa/Johannesburg (SAST)' },
+  { value: 'Africa/Nairobi', label: 'Africa/Nairobi (EAT)' },
+  { value: 'Africa/Lagos', label: 'Africa/Lagos (WAT)' },
+  { value: 'Africa/Accra', label: 'Africa/Accra (GMT)' },
+  { value: 'Asia/Dubai', label: 'Asia/Dubai (GST)' },
+  { value: 'Asia/Kolkata', label: 'Asia/Kolkata (IST)' },
+  { value: 'Asia/Singapore', label: 'Asia/Singapore (SGT)' },
+  { value: 'Asia/Tokyo', label: 'Asia/Tokyo (JST)' },
+  { value: 'Australia/Sydney', label: 'Australia/Sydney (AEST/AEDT)' },
+];
+
+const PAPER_SIZES = [
+  { value: '58mm', label: '58mm (Small receipt)' },
+  { value: '80mm', label: '80mm (Standard receipt)' },
+  { value: 'A4', label: 'A4 (Full page)' },
+];
+
+const FONT_SIZES = [
+  { value: 'small', label: 'Small' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'large', label: 'Large' },
+];
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface StoreSettings {
   _id: string;
@@ -65,6 +124,117 @@ interface StoreSettings {
   };
 }
 
+// ─── PickerModal ─────────────────────────────────────────────────────────────
+
+interface PickerModalProps {
+  visible: boolean;
+  title: string;
+  options: { value: string; label: string }[];
+  selected: string;
+  onSelect: (value: string) => void;
+  onClose: () => void;
+}
+
+function PickerModal({ visible, title, options, selected, onSelect, onClose }: PickerModalProps) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
+      <TouchableOpacity style={pickerStyles.overlay} activeOpacity={1} onPress={onClose} />
+      <SafeAreaView style={pickerStyles.sheet}>
+        <View style={pickerStyles.handle} />
+        <View style={pickerStyles.sheetHeader}>
+          <Text style={pickerStyles.sheetTitle}>{title}</Text>
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close" size={22} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+        <FlatList
+          data={options}
+          keyExtractor={(item) => item.value}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={pickerStyles.option}
+              onPress={() => { onSelect(item.value); onClose(); }}
+            >
+              <Text style={[pickerStyles.optionText, item.value === selected && pickerStyles.optionSelected]}>
+                {item.label}
+              </Text>
+              {item.value === selected && (
+                <Ionicons name="checkmark" size={20} color="#3B82F6" />
+              )}
+            </TouchableOpacity>
+          )}
+          ItemSeparatorComponent={() => <View style={pickerStyles.separator} />}
+          style={pickerStyles.list}
+        />
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+const pickerStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  sheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '60%',
+    paddingBottom: 16,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  list: { paddingHorizontal: 4 },
+  option: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  optionText: {
+    fontSize: 16,
+    color: '#374151',
+  },
+  optionSelected: {
+    color: '#3B82F6',
+    fontWeight: '600',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginHorizontal: 20,
+  },
+});
+
+// ─── Settings Screen ──────────────────────────────────────────────────────────
+
 export default function SettingsScreen() {
   const { user } = useAuthStore();
   const {
@@ -79,6 +249,11 @@ export default function SettingsScreen() {
   const [activeSection, setActiveSection] = useState<'general' | 'receipt' | 'tax' | 'hours' | 'features'>('general');
   const [isEditing, setIsEditing] = useState(false);
   const [editedSettings, setEditedSettings] = useState<Partial<StoreSettings>>({});
+
+  // Picker modal state
+  const [picker, setPicker] = useState<{
+    type: 'currency' | 'timezone' | 'paperSize' | 'fontSize' | null;
+  }>({ type: null });
 
   useEffect(() => {
     fetchStoreSettings();
@@ -100,22 +275,18 @@ export default function SettingsScreen() {
     setEditedSettings({});
   };
 
-
   const handleFieldChange = (field: string, value: any) => {
-    setEditedSettings(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setEditedSettings(prev => ({ ...prev, [field]: value }));
   };
 
   const handleReceiptFieldChange = (field: string, value: any) => {
     setEditedSettings(prev => ({
       ...prev,
       receiptSettings: {
-        ...prev.receiptSettings,
         ...storeSettings?.receiptSettings,
-        [field]: value
-      } as StoreSettings['receiptSettings']
+        ...prev.receiptSettings,
+        [field]: value,
+      } as StoreSettings['receiptSettings'],
     }));
   };
 
@@ -123,29 +294,63 @@ export default function SettingsScreen() {
     setEditedSettings(prev => ({
       ...prev,
       taxSettings: {
-        ...prev.taxSettings,
         ...storeSettings?.taxSettings,
-        [field]: value
-      } as StoreSettings['taxSettings']
+        ...prev.taxSettings,
+        [field]: value,
+      } as StoreSettings['taxSettings'],
     }));
   };
 
+  // ── Picker helpers ────────────────────────────────────────────────────────
+
+  const currentValue = (field: 'currency' | 'timezone') => {
+    const merged = { ...storeSettings, ...editedSettings };
+    return (merged as any)[field] ?? '';
+  };
+  const currentReceiptValue = (field: 'paperSize' | 'fontSize') => {
+    const merged = { ...storeSettings?.receiptSettings, ...editedSettings.receiptSettings };
+    return (merged as any)[field] ?? '';
+  };
+
+  const PickerRow = ({
+    label,
+    value,
+    pickerType,
+  }: {
+    label: string;
+    value: string;
+    pickerType: 'currency' | 'timezone' | 'paperSize' | 'fontSize';
+  }) => (
+    <View style={styles.inputGroup}>
+      <Text style={styles.label}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.pickerContainer, !isEditing && styles.pickerDisabled]}
+        onPress={() => isEditing && setPicker({ type: pickerType })}
+        activeOpacity={isEditing ? 0.7 : 1}
+      >
+        <Text style={[styles.pickerText, !value && { color: '#9CA3AF' }]}>{value || '—'}</Text>
+        {isEditing && <Ionicons name="chevron-down" size={20} color="#6B7280" />}
+      </TouchableOpacity>
+    </View>
+  );
+
+  // ── Section renderers ─────────────────────────────────────────────────────
+
   const renderGeneralSettings = () => {
     if (!storeSettings) return null;
-
     const settings = { ...storeSettings, ...editedSettings };
 
     return (
       <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Store Information</Text>
-          
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Store Name</Text>
             <TextInput
               style={styles.input}
               value={settings.name}
-              onChangeText={(value) => handleFieldChange('name', value)}
+              onChangeText={(v) => handleFieldChange('name', v)}
               editable={isEditing}
               placeholder="Enter store name"
             />
@@ -156,7 +361,7 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.input}
               value={settings.phoneNumber || ''}
-              onChangeText={(value) => handleFieldChange('phoneNumber', value)}
+              onChangeText={(v) => handleFieldChange('phoneNumber', v)}
               editable={isEditing}
               placeholder="Enter phone number"
               keyboardType="phone-pad"
@@ -168,7 +373,7 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.input}
               value={settings.email || ''}
-              onChangeText={(value) => handleFieldChange('email', value)}
+              onChangeText={(v) => handleFieldChange('email', v)}
               editable={isEditing}
               placeholder="Enter email address"
               keyboardType="email-address"
@@ -176,32 +381,28 @@ export default function SettingsScreen() {
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Currency</Text>
-            <View style={styles.pickerContainer}>
-              <Text style={styles.pickerText}>{settings.currency}</Text>
-              <Ionicons name="chevron-down" size={20} color="#6B7280" />
-            </View>
-          </View>
+          <PickerRow
+            label="Currency"
+            value={currentValue('currency')}
+            pickerType="currency"
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Timezone</Text>
-            <View style={styles.pickerContainer}>
-              <Text style={styles.pickerText}>{settings.timezone}</Text>
-              <Ionicons name="chevron-down" size={20} color="#6B7280" />
-            </View>
-          </View>
+          <PickerRow
+            label="Timezone"
+            value={currentValue('timezone')}
+            pickerType="timezone"
+          />
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Address</Text>
-          
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Street Address</Text>
             <TextInput
               style={styles.input}
               value={settings.address.street}
-              onChangeText={(value) => handleFieldChange('address', { ...settings.address, street: value })}
+              onChangeText={(v) => handleFieldChange('address', { ...settings.address, street: v })}
               editable={isEditing}
               placeholder="Enter street address"
             />
@@ -213,7 +414,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={styles.input}
                 value={settings.address.city}
-                onChangeText={(value) => handleFieldChange('address', { ...settings.address, city: value })}
+                onChangeText={(v) => handleFieldChange('address', { ...settings.address, city: v })}
                 editable={isEditing}
                 placeholder="City"
               />
@@ -223,7 +424,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={styles.input}
                 value={settings.address.postalCode}
-                onChangeText={(value) => handleFieldChange('address', { ...settings.address, postalCode: value })}
+                onChangeText={(v) => handleFieldChange('address', { ...settings.address, postalCode: v })}
                 editable={isEditing}
                 placeholder="Postal code"
               />
@@ -235,7 +436,7 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.input}
               value={settings.address.country}
-              onChangeText={(value) => handleFieldChange('address', { ...settings.address, country: value })}
+              onChangeText={(v) => handleFieldChange('address', { ...settings.address, country: v })}
               editable={isEditing}
               placeholder="Country"
             />
@@ -247,21 +448,19 @@ export default function SettingsScreen() {
 
   const renderReceiptSettings = () => {
     if (!storeSettings) return null;
-
-    const settings = { ...storeSettings, ...editedSettings };
-    const receiptSettings = settings.receiptSettings || storeSettings.receiptSettings;
+    const receiptSettings = { ...storeSettings.receiptSettings, ...editedSettings.receiptSettings };
 
     return (
       <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Receipt Header & Footer</Text>
-          
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Header Text</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={receiptSettings.headerText}
-              onChangeText={(value) => handleReceiptFieldChange('headerText', value)}
+              onChangeText={(v) => handleReceiptFieldChange('headerText', v)}
               editable={isEditing}
               placeholder="Enter header text"
               multiline
@@ -274,7 +473,7 @@ export default function SettingsScreen() {
             <TextInput
               style={[styles.input, styles.textArea]}
               value={receiptSettings.footerText}
-              onChangeText={(value) => handleReceiptFieldChange('footerText', value)}
+              onChangeText={(v) => handleReceiptFieldChange('footerText', v)}
               editable={isEditing}
               placeholder="Enter footer text"
               multiline
@@ -286,7 +485,7 @@ export default function SettingsScreen() {
             <Text style={styles.label}>Show Logo</Text>
             <Switch
               value={receiptSettings.showLogo}
-              onValueChange={(value) => handleReceiptFieldChange('showLogo', value)}
+              onValueChange={(v) => handleReceiptFieldChange('showLogo', v)}
               disabled={!isEditing}
             />
           </View>
@@ -295,7 +494,7 @@ export default function SettingsScreen() {
             <Text style={styles.label}>Show Tax Breakdown</Text>
             <Switch
               value={receiptSettings.showTaxBreakdown}
-              onValueChange={(value) => handleReceiptFieldChange('showTaxBreakdown', value)}
+              onValueChange={(v) => handleReceiptFieldChange('showTaxBreakdown', v)}
               disabled={!isEditing}
             />
           </View>
@@ -304,7 +503,7 @@ export default function SettingsScreen() {
             <Text style={styles.label}>Show Loyalty Points</Text>
             <Switch
               value={receiptSettings.showLoyaltyPoints}
-              onValueChange={(value) => handleReceiptFieldChange('showLoyaltyPoints', value)}
+              onValueChange={(v) => handleReceiptFieldChange('showLoyaltyPoints', v)}
               disabled={!isEditing}
             />
           </View>
@@ -313,7 +512,7 @@ export default function SettingsScreen() {
             <Text style={styles.label}>Show QR Code</Text>
             <Switch
               value={receiptSettings.showQRCode}
-              onValueChange={(value) => handleReceiptFieldChange('showQRCode', value)}
+              onValueChange={(v) => handleReceiptFieldChange('showQRCode', v)}
               disabled={!isEditing}
             />
           </View>
@@ -321,22 +520,18 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Receipt Format</Text>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Paper Size</Text>
-            <View style={styles.pickerContainer}>
-              <Text style={styles.pickerText}>{receiptSettings.paperSize}</Text>
-              <Ionicons name="chevron-down" size={20} color="#6B7280" />
-            </View>
-          </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Font Size</Text>
-            <View style={styles.pickerContainer}>
-              <Text style={styles.pickerText}>{receiptSettings.fontSize}</Text>
-              <Ionicons name="chevron-down" size={20} color="#6B7280" />
-            </View>
-          </View>
+          <PickerRow
+            label="Paper Size"
+            value={currentReceiptValue('paperSize')}
+            pickerType="paperSize"
+          />
+
+          <PickerRow
+            label="Font Size"
+            value={currentReceiptValue('fontSize')}
+            pickerType="fontSize"
+          />
         </View>
       </ScrollView>
     );
@@ -344,21 +539,19 @@ export default function SettingsScreen() {
 
   const renderTaxSettings = () => {
     if (!storeSettings) return null;
-
-    const settings = { ...storeSettings, ...editedSettings };
-    const taxSettings = settings.taxSettings || storeSettings.taxSettings;
+    const taxSettings = { ...storeSettings.taxSettings, ...editedSettings.taxSettings };
 
     return (
       <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Tax Configuration</Text>
-          
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Default Tax Rate (%)</Text>
             <TextInput
               style={styles.input}
               value={taxSettings.defaultTaxRate.toString()}
-              onChangeText={(value) => handleTaxFieldChange('defaultTaxRate', parseFloat(value) || 0)}
+              onChangeText={(v) => handleTaxFieldChange('defaultTaxRate', parseFloat(v) || 0)}
               editable={isEditing}
               placeholder="0"
               keyboardType="numeric"
@@ -370,7 +563,7 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.input}
               value={taxSettings.taxName}
-              onChangeText={(value) => handleTaxFieldChange('taxName', value)}
+              onChangeText={(v) => handleTaxFieldChange('taxName', v)}
               editable={isEditing}
               placeholder="e.g., VAT, Sales Tax"
             />
@@ -381,7 +574,7 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.input}
               value={taxSettings.taxNumber || ''}
-              onChangeText={(value) => handleTaxFieldChange('taxNumber', value)}
+              onChangeText={(v) => handleTaxFieldChange('taxNumber', v)}
               editable={isEditing}
               placeholder="Enter tax registration number"
             />
@@ -391,7 +584,7 @@ export default function SettingsScreen() {
             <Text style={styles.label}>Tax Inclusive Pricing</Text>
             <Switch
               value={taxSettings.taxInclusive}
-              onValueChange={(value) => handleTaxFieldChange('taxInclusive', value)}
+              onValueChange={(v) => handleTaxFieldChange('taxInclusive', v)}
               disabled={!isEditing}
             />
           </View>
@@ -400,7 +593,7 @@ export default function SettingsScreen() {
             <Text style={styles.label}>Show Tax on Receipt</Text>
             <Switch
               value={taxSettings.showTaxOnReceipt}
-              onValueChange={(value) => handleTaxFieldChange('showTaxOnReceipt', value)}
+              onValueChange={(v) => handleTaxFieldChange('showTaxOnReceipt', v)}
               disabled={!isEditing}
             />
           </View>
@@ -411,17 +604,15 @@ export default function SettingsScreen() {
 
   const renderBusinessHours = () => {
     if (!storeSettings) return null;
-
     const settings = { ...storeSettings, ...editedSettings };
     const businessHours = settings.businessHours || storeSettings.businessHours;
-
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
     return (
       <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Business Hours</Text>
-          
+
           {days.map((day) => {
             const dayHours = businessHours[day] || { isOpen: false, openTime: '09:00', closeTime: '17:00' };
             return (
@@ -430,15 +621,14 @@ export default function SettingsScreen() {
                   <Text style={styles.dayName}>{day.charAt(0).toUpperCase() + day.slice(1)}</Text>
                   <Switch
                     value={dayHours.isOpen}
-                    onValueChange={(value) => {
-                      const newHours = { ...businessHours };
-                      newHours[day] = { ...dayHours, isOpen: value };
+                    onValueChange={(v) => {
+                      const newHours = { ...businessHours, [day]: { ...dayHours, isOpen: v } };
                       handleFieldChange('businessHours', newHours);
                     }}
                     disabled={!isEditing}
                   />
                 </View>
-                
+
                 {dayHours.isOpen && (
                   <View style={styles.timeInputs}>
                     <View style={styles.timeInput}>
@@ -446,9 +636,8 @@ export default function SettingsScreen() {
                       <TextInput
                         style={styles.timeInputField}
                         value={dayHours.openTime}
-                        onChangeText={(value) => {
-                          const newHours = { ...businessHours };
-                          newHours[day] = { ...dayHours, openTime: value };
+                        onChangeText={(v) => {
+                          const newHours = { ...businessHours, [day]: { ...dayHours, openTime: v } };
                           handleFieldChange('businessHours', newHours);
                         }}
                         editable={isEditing}
@@ -460,13 +649,38 @@ export default function SettingsScreen() {
                       <TextInput
                         style={styles.timeInputField}
                         value={dayHours.closeTime}
-                        onChangeText={(value) => {
-                          const newHours = { ...businessHours };
-                          newHours[day] = { ...dayHours, closeTime: value };
+                        onChangeText={(v) => {
+                          const newHours = { ...businessHours, [day]: { ...dayHours, closeTime: v } };
                           handleFieldChange('businessHours', newHours);
                         }}
                         editable={isEditing}
                         placeholder="17:00"
+                      />
+                    </View>
+                    <View style={styles.timeInput}>
+                      <Text style={styles.timeLabel}>Break Start</Text>
+                      <TextInput
+                        style={styles.timeInputField}
+                        value={dayHours.breakStart || ''}
+                        onChangeText={(v) => {
+                          const newHours = { ...businessHours, [day]: { ...dayHours, breakStart: v || undefined } };
+                          handleFieldChange('businessHours', newHours);
+                        }}
+                        editable={isEditing}
+                        placeholder="optional"
+                      />
+                    </View>
+                    <View style={styles.timeInput}>
+                      <Text style={styles.timeLabel}>Break End</Text>
+                      <TextInput
+                        style={styles.timeInputField}
+                        value={dayHours.breakEnd || ''}
+                        onChangeText={(v) => {
+                          const newHours = { ...businessHours, [day]: { ...dayHours, breakEnd: v || undefined } };
+                          handleFieldChange('businessHours', newHours);
+                        }}
+                        editable={isEditing}
+                        placeholder="optional"
                       />
                     </View>
                   </View>
@@ -481,7 +695,6 @@ export default function SettingsScreen() {
 
   const renderFeatures = () => {
     if (!storeSettings) return null;
-
     const settings = { ...storeSettings, ...editedSettings };
     const features = settings.features || storeSettings.features;
 
@@ -489,58 +702,65 @@ export default function SettingsScreen() {
       <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Feature Toggles</Text>
-          
-          <View style={styles.switchGroup}>
-            <View style={styles.featureInfo}>
-              <Text style={styles.label}>Loyalty Program</Text>
-              <Text style={styles.featureDescription}>Enable customer loyalty points and rewards</Text>
-            </View>
-            <Switch
-              value={features.loyaltyProgram}
-              onValueChange={(value) => handleFieldChange('features', { ...features, loyaltyProgram: value })}
-              disabled={!isEditing}
-            />
-          </View>
 
-          <View style={styles.switchGroup}>
-            <View style={styles.featureInfo}>
-              <Text style={styles.label}>Multi-Store Support</Text>
-              <Text style={styles.featureDescription}>Manage multiple store locations</Text>
+          {([
+            { key: 'loyaltyProgram', label: 'Loyalty Program', desc: 'Enable customer loyalty points and rewards' },
+            { key: 'multiStore', label: 'Multi-Store Support', desc: 'Manage multiple store locations' },
+            { key: 'advancedReports', label: 'Advanced Reports', desc: 'Access detailed analytics and insights' },
+            { key: 'inventoryTracking', label: 'Inventory Tracking', desc: 'Track stock levels and low stock alerts' },
+          ] as const).map(({ key, label, desc }) => (
+            <View key={key} style={styles.switchGroup}>
+              <View style={styles.featureInfo}>
+                <Text style={styles.label}>{label}</Text>
+                <Text style={styles.featureDescription}>{desc}</Text>
+              </View>
+              <Switch
+                value={features[key]}
+                onValueChange={(v) => handleFieldChange('features', { ...features, [key]: v })}
+                disabled={!isEditing}
+              />
             </View>
-            <Switch
-              value={features.multiStore}
-              onValueChange={(value) => handleFieldChange('features', { ...features, multiStore: value })}
-              disabled={!isEditing}
-            />
-          </View>
-
-          <View style={styles.switchGroup}>
-            <View style={styles.featureInfo}>
-              <Text style={styles.label}>Advanced Reports</Text>
-              <Text style={styles.featureDescription}>Access detailed analytics and insights</Text>
-            </View>
-            <Switch
-              value={features.advancedReports}
-              onValueChange={(value) => handleFieldChange('features', { ...features, advancedReports: value })}
-              disabled={!isEditing}
-            />
-          </View>
-
-          <View style={styles.switchGroup}>
-            <View style={styles.featureInfo}>
-              <Text style={styles.label}>Inventory Tracking</Text>
-              <Text style={styles.featureDescription}>Track stock levels and low stock alerts</Text>
-            </View>
-            <Switch
-              value={features.inventoryTracking}
-              onValueChange={(value) => handleFieldChange('features', { ...features, inventoryTracking: value })}
-              disabled={!isEditing}
-            />
-          </View>
+          ))}
         </View>
       </ScrollView>
     );
   };
+
+  // ── Picker modal selection ────────────────────────────────────────────────
+
+  const handlePickerSelect = (value: string) => {
+    switch (picker.type) {
+      case 'currency':
+        handleFieldChange('currency', value);
+        break;
+      case 'timezone':
+        handleFieldChange('timezone', value);
+        break;
+      case 'paperSize':
+        handleReceiptFieldChange('paperSize', value);
+        break;
+      case 'fontSize':
+        handleReceiptFieldChange('fontSize', value);
+        break;
+    }
+  };
+
+  const pickerConfig = (): { title: string; options: { value: string; label: string }[]; selected: string } => {
+    switch (picker.type) {
+      case 'currency':
+        return { title: 'Select Currency', options: CURRENCIES, selected: currentValue('currency') };
+      case 'timezone':
+        return { title: 'Select Timezone', options: TIMEZONES, selected: currentValue('timezone') };
+      case 'paperSize':
+        return { title: 'Select Paper Size', options: PAPER_SIZES, selected: currentReceiptValue('paperSize') };
+      case 'fontSize':
+        return { title: 'Select Font Size', options: FONT_SIZES, selected: currentReceiptValue('fontSize') };
+      default:
+        return { title: '', options: [], selected: '' };
+    }
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading && !refreshing) {
     return (
@@ -551,8 +771,24 @@ export default function SettingsScreen() {
     );
   }
 
+  const { title: pTitle, options: pOptions, selected: pSelected } = pickerConfig();
+
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+
+      {/* Picker modal */}
+      {picker.type !== null && (
+        <PickerModal
+          visible
+          title={pTitle}
+          options={pOptions}
+          selected={pSelected}
+          onSelect={handlePickerSelect}
+          onClose={() => setPicker({ type: null })}
+        />
+      )}
+
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
         <View style={styles.headerActions}>
@@ -575,46 +811,17 @@ export default function SettingsScreen() {
 
       <View style={styles.tabContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll}>
-          <TouchableOpacity
-            style={[styles.tab, activeSection === 'general' && styles.activeTab]}
-            onPress={() => setActiveSection('general')}
-          >
-            <Text style={[styles.tabText, activeSection === 'general' && styles.activeTabText]}>
-              General
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeSection === 'receipt' && styles.activeTab]}
-            onPress={() => setActiveSection('receipt')}
-          >
-            <Text style={[styles.tabText, activeSection === 'receipt' && styles.activeTabText]}>
-              Receipt
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeSection === 'tax' && styles.activeTab]}
-            onPress={() => setActiveSection('tax')}
-          >
-            <Text style={[styles.tabText, activeSection === 'tax' && styles.activeTabText]}>
-              Tax
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeSection === 'hours' && styles.activeTab]}
-            onPress={() => setActiveSection('hours')}
-          >
-            <Text style={[styles.tabText, activeSection === 'hours' && styles.activeTabText]}>
-              Hours
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeSection === 'features' && styles.activeTab]}
-            onPress={() => setActiveSection('features')}
-          >
-            <Text style={[styles.tabText, activeSection === 'features' && styles.activeTabText]}>
-              Features
-            </Text>
-          </TouchableOpacity>
+          {(['general', 'receipt', 'tax', 'hours', 'features'] as const).map((section) => (
+            <TouchableOpacity
+              key={section}
+              style={[styles.tab, activeSection === section && styles.activeTab]}
+              onPress={() => setActiveSection(section)}
+            >
+              <Text style={[styles.tabText, activeSection === section && styles.activeTabText]}>
+                {section.charAt(0).toUpperCase() + section.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       </View>
 
@@ -629,7 +836,7 @@ export default function SettingsScreen() {
           />
         }
       >
-        {/* User Profile Section */}
+        {/* User Profile */}
         <View style={styles.profileSection}>
           <View style={styles.profileCard}>
             <View style={styles.profileHeader}>
@@ -642,11 +849,9 @@ export default function SettingsScreen() {
                 <Text style={styles.profileRole}>{user?.role || 'Staff'}</Text>
               </View>
             </View>
-
           </View>
         </View>
 
-        {/* Settings Content */}
         {activeSection === 'general' && renderGeneralSettings()}
         {activeSection === 'receipt' && renderReceiptSettings()}
         {activeSection === 'tax' && renderTaxSettings()}
@@ -756,10 +961,7 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
@@ -804,6 +1006,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#FFFFFF',
   },
+  pickerDisabled: {
+    backgroundColor: '#F9FAFB',
+  },
   pickerText: {
     fontSize: 16,
     color: '#111827',
@@ -842,10 +1047,12 @@ const styles = StyleSheet.create({
   },
   timeInputs: {
     flexDirection: 'row',
-    gap: 12,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   timeInput: {
     flex: 1,
+    minWidth: 80,
   },
   timeLabel: {
     fontSize: 12,
@@ -872,10 +1079,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
@@ -883,7 +1087,6 @@ const styles = StyleSheet.create({
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
   },
   profileAvatar: {
     width: 60,
@@ -913,5 +1116,4 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textTransform: 'capitalize',
   },
-
 });

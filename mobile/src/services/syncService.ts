@@ -147,17 +147,16 @@ class SyncService {
 
         const createResponse = await apiService.post('/api/products', payloadCreate) as any;
 
-        // Update local product with serverId
-        if (createResponse && (createResponse.id || createResponse._id)) {
-          const newServerId = createResponse.id || createResponse._id;
-          await db.update(products)
-            .set({
-              serverId: newServerId,
-              syncStatus: 'synced',
-              lastSyncedAt: Date.now()
-            })
-            .where(eq(products.id, documentId));
-        }
+        // Unwrap { success, data: {...} } envelope that apiService returns
+        const createdProduct = createResponse?.data ?? createResponse;
+        const newServerId = createdProduct?._id ?? createdProduct?.id ?? null;
+        await db.update(products)
+          .set({
+            ...(newServerId ? { serverId: String(newServerId) } : {}),
+            syncStatus: 'synced',
+            lastSyncedAt: Date.now()
+          })
+          .where(eq(products.id, documentId));
         break;
       case 'update': {
         if (!serverId) throw new Error('Cannot update product: Missing serverId');
@@ -209,24 +208,27 @@ class SyncService {
     }
 
     switch (operation) {
-      case 'create':
+      case 'create': {
         const createResponse = await apiService.post('/api/products/categories', data) as any;
 
-        // Update local category with serverId
-        if (createResponse && (createResponse.id || createResponse._id)) {
-          const newServerId = createResponse.id || createResponse._id;
-          await db.update(categories)
-            .set({
-              serverId: newServerId,
-              syncStatus: 'synced',
-              lastSyncedAt: Date.now()
-            })
-            .where(eq(categories.id, documentId));
-        }
+        // Unwrap { success, data: {...} } envelope that apiService returns
+        const createdCategory = createResponse?.data ?? createResponse;
+        const newCatServerId = createdCategory?._id ?? createdCategory?.id ?? null;
+        await db.update(categories)
+          .set({
+            ...(newCatServerId ? { serverId: String(newCatServerId) } : {}),
+            syncStatus: 'synced',
+            lastSyncedAt: Date.now()
+          })
+          .where(eq(categories.id, documentId));
         break;
+      }
       case 'update':
         if (!serverId) throw new Error('Cannot update category: Missing serverId');
         await apiService.put(`/api/products/categories/${serverId}`, data);
+        await db.update(categories)
+          .set({ syncStatus: 'synced', lastSyncedAt: Date.now() })
+          .where(eq(categories.id, documentId));
         break;
       case 'delete':
         if (!serverId) {
@@ -584,12 +586,11 @@ class SyncService {
           serverId = String(serverProduct.id);
         }
 
-        // Check if product exists locally by server_id
-        const existingProducts = serverId
-          ? await db.select().from(products)
-            .where(eq(products.serverId, serverId))
-            .limit(1)
-          : [];
+        // Check if product exists locally by server_id or sku
+        let existingProducts: any[] = [];
+        if (serverId) {
+          existingProducts = await db.select().from(products).where(eq(products.serverId, serverId)).limit(1);
+        }
 
         // Validate required fields before creating productData
         if (!serverProduct.name || !serverProduct.sku) {
@@ -602,11 +603,15 @@ class SyncService {
           continue;
         }
 
+        if (existingProducts.length === 0 && serverProduct.sku) {
+          existingProducts = await db.select().from(products).where(eq(products.sku, String(serverProduct.sku).toUpperCase())).limit(1);
+        }
+
         const now = Date.now();
         const serverSyncVersion = serverProduct.syncVersion != null ? Number(serverProduct.syncVersion) : null;
         const productData = {
           name: String(serverProduct.name || ''),
-          sku: String(serverProduct.sku || ''),
+          sku: String(serverProduct.sku || '').toUpperCase(),
           barcode: serverProduct.barcode ? String(serverProduct.barcode) : null,
           categoryId: categoryId,
           price: Number(serverProduct.price) || 0,
@@ -707,10 +712,15 @@ class SyncService {
           continue;
         }
 
-        // Check if category exists locally by server_id
-        const existingCategories = await db.select().from(categories)
-          .where(eq(categories.serverId, serverId))
-          .limit(1);
+        // Check if category exists locally by server_id or name
+        let existingCategories: any[] = [];
+        if (serverId) {
+          existingCategories = await db.select().from(categories).where(eq(categories.serverId, serverId)).limit(1);
+        }
+
+        if (existingCategories.length === 0 && serverCategory.name) {
+          existingCategories = await db.select().from(categories).where(eq(categories.name, String(serverCategory.name).trim())).limit(1);
+        }
 
         const now = Date.now();
         const categoryName = String(serverCategory.name || '').trim();

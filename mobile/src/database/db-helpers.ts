@@ -89,7 +89,7 @@ export async function createProduct(data: {
   await db.insert(products).values({
     id,
     name: data.name,
-    sku: data.sku,
+    sku: data.sku.toUpperCase(),
     barcode: data.barcode || null,
     categoryId: data.categoryId,
     price: data.price,
@@ -130,7 +130,7 @@ export async function updateProduct(id: string, data: Partial<{
   };
 
   if (data.name !== undefined) updateData.name = data.name;
-  if (data.sku !== undefined) updateData.sku = data.sku;
+  if (data.sku !== undefined) updateData.sku = data.sku.toUpperCase();
   if (data.barcode !== undefined) updateData.barcode = data.barcode || null;
   if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
   if (data.price !== undefined) updateData.price = data.price;
@@ -193,6 +193,50 @@ export async function getCategoryById(id: string): Promise<Category | null> {
   const db = await getDatabase();
   const result = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
   return result.length > 0 ? categoryFromDb(result[0]) : null;
+}
+
+export async function createCategory(data: {
+  name: string;
+  description?: string;
+}): Promise<Category> {
+  const db = await getDatabase();
+  const id = await generateId();
+  const now = Date.now();
+
+  await db.insert(categories).values({
+    id,
+    name: data.name.trim(),
+    description: data.description?.trim() || null,
+    isActive: true,
+    syncStatus: 'pending',
+    createdAt: new Date(now),
+    updatedAt: new Date(now),
+  });
+
+  const category = await getCategoryById(id);
+  if (!category) throw new Error('Failed to create category');
+  return category;
+}
+
+export async function updateCategory(id: string, data: Partial<{
+  name: string;
+  description: string;
+}>): Promise<Category> {
+  const db = await getDatabase();
+  const updateData: any = { updatedAt: new Date(), syncStatus: 'pending' };
+  if (data.name !== undefined) updateData.name = data.name.trim();
+  if (data.description !== undefined) updateData.description = data.description?.trim() || null;
+  await db.update(categories).set(updateData).where(eq(categories.id, id));
+  const category = await getCategoryById(id);
+  if (!category) throw new Error('Failed to update category');
+  return category;
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  const db = await getDatabase();
+  await db.update(categories)
+    .set({ isActive: false, syncStatus: 'pending', updatedAt: new Date() })
+    .where(eq(categories.id, id));
 }
 
 // Customers helpers

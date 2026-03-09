@@ -37,6 +37,10 @@ export interface ProductState {
   syncProducts: () => Promise<void>;
   setFilters: (filters: ProductFilters) => void;
   clearError: () => void;
+  // Category actions
+  createCategory: (data: { name: string; description?: string }) => Promise<Category>;
+  updateCategory: (id: string, data: { name?: string; description?: string }) => Promise<Category>;
+  deleteCategory: (id: string) => Promise<void>;
 }
 
 // Sync service is imported as singleton
@@ -73,15 +77,17 @@ export const useProductStore = create<ProductState>((set, get) => ({
   },
 
   loadCategories: async () => {
+    set({ isLoading: true });
     try {
       const categories = await dbHelpers.getAllCategories();
       console.log('[PRODUCT_STORE] Loaded categories:', categories.length);
-      set({ categories });
+      set({ categories, isLoading: false });
     } catch (error) {
       console.error('[PRODUCT_STORE] Error loading categories:', error);
       set({
         error: error instanceof Error ? error.message : 'Failed to load categories',
-        categories: [], // Ensure categories array is set even on error
+        categories: [],
+        isLoading: false,
       });
     }
   },
@@ -255,5 +261,43 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  createCategory: async (data) => {
+    try {
+      const category = await dbHelpers.createCategory(data);
+      await syncService.addToSyncQueue('create', 'categories', category.id, {
+        name: data.name,
+        description: data.description,
+      });
+      await get().loadCategories();
+      return category;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to create category' });
+      throw error;
+    }
+  },
+
+  updateCategory: async (id, data) => {
+    try {
+      const category = await dbHelpers.updateCategory(id, data);
+      await syncService.addToSyncQueue('update', 'categories', id, data);
+      await get().loadCategories();
+      return category;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to update category' });
+      throw error;
+    }
+  },
+
+  deleteCategory: async (id) => {
+    try {
+      await dbHelpers.deleteCategory(id);
+      await syncService.addToSyncQueue('delete', 'categories', id, {});
+      await get().loadCategories();
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to delete category' });
+      throw error;
+    }
   },
 }));
