@@ -7,6 +7,7 @@ This guide covers building an APK and publishing the app to Google Play using **
 ## Prerequisites
 
 - **Node.js** and **npm** (or yarn) installed
+- **Android adaptive icon:** `assets/images/android-icon-foreground.png` must be **square** (e.g. 1024×1024). If `npx expo doctor` reports non-square dimensions, replace the file with a square PNG so the build and store listing validate.
 - **Expo account** – [create one](https://expo.dev/signup) if needed
 - **EAS CLI** – install globally:
   ```bash

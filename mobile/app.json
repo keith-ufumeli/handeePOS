@@ -8,8 +8,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
-      "useFrameworks": "static"
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
