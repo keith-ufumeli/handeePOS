@@ -809,7 +809,11 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.tabContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabScroll}
+        >
           {(['general', 'receipt', 'tax', 'hours', 'features'] as const).map((section) => (
             <TouchableOpacity
               key={section}
@@ -930,6 +934,8 @@ function createStyles(theme: typeof Colors.light) {
       borderBottomColor: theme.border,
     },
     tabScroll: {
+      flexDirection: 'row',
+      alignItems: 'center',
       paddingHorizontal: 20,
     },
     tab: {
