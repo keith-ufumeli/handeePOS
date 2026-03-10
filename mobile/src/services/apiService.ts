@@ -6,7 +6,7 @@ import { getOrCreateDeviceId } from '../utils/deviceId';
 
 const API_BASE_URL = __DEV__
   ? (Platform.OS === 'ios' ? config.apiUrl : 'https://handeepos.onrender.com')
-  : 'https://your-production-api.com';
+  : 'https://handeepos.onrender.com';
 
 // Allow time for Render.com cold start (~30–60s on free tier)
 const REQUEST_TIMEOUT_MS = 60000;

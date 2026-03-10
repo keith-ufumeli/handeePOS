@@ -54,11 +54,11 @@ export default function WelcomeScreen() {
         <Text style={styles.appName}>HandeePOS</Text>
         <Text style={styles.tagline}>Point of Sale Made Simple</Text>
 
-        {/* Connection Status */}
-        <View style={[styles.connectionCard, { backgroundColor: 'rgba(255, 255, 255, 0.15)' }]}>
+        {/* Connection Status — card and icons use high-contrast colors on teal/emerald gradient */}
+        <View style={[styles.connectionCard, styles.connectionCardBg]}>
           {isCheckingConnection ? (
             <View style={styles.connectionStatus}>
-              <ActivityIndicator size="small" color={theme.white} />
+              <ActivityIndicator size="small" color="#FFFFFF" />
               <Text style={styles.connectionText}>Checking connection...</Text>
             </View>
           ) : (
@@ -66,7 +66,7 @@ export default function WelcomeScreen() {
               <Ionicons
                 name={isConnected ? 'checkmark-circle' : 'close-circle'}
                 size={24}
-                color={isConnected ? theme.success : theme.error}
+                color={isConnected ? '#FFFFFF' : '#FCA5A5'}
               />
               <View style={styles.connectionTextContainer}>
                 <Text style={styles.connectionText}>
@@ -83,8 +83,8 @@ export default function WelcomeScreen() {
         </View>
 
         {/* Info Message */}
-        <View style={[styles.infoCard, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]}>
-          <Ionicons name="information-circle-outline" size={20} color="rgba(255, 255, 255, 0.8)" />
+        <View style={[styles.infoCard, styles.infoCardBg]}>
+          <Ionicons name="information-circle-outline" size={20} color="rgba(255, 255, 255, 0.95)" />
           <Text style={styles.infoText}>
             {isConnected
               ? 'An active internet connection is required to sign in and sync your data.'
@@ -171,6 +171,9 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg,
     marginBottom: Spacing.lg,
   },
+  connectionCardBg: {
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+  },
   connectionStatus: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -196,6 +199,9 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     marginBottom: Spacing.xxxl,
     gap: Spacing.sm,
+  },
+  infoCardBg: {
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
   },
   infoText: {
     flex: 1,
