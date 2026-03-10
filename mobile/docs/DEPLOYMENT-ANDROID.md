@@ -89,6 +89,12 @@ eas build --platform android --profile preview
 - EAS will prompt for any missing configuration (e.g. Android package name).
 - Build runs in the cloud. When it finishes, you get a link to download the **APK**.
 
+**If the build fails with `expo-barcode-scanner:compileReleaseKotlin`:** The app uses **expo-camera** for barcode scanning only; `expo-barcode-scanner` must not be in `package.json`. Ensure it is removed, run `npm install`, commit and push, then run the build with cache cleared:
+
+```bash
+eas build --platform android --profile preview --clear-cache
+```
+
 ### 1.5 Download and install the APK
 
 1. Open the build link from the terminal or from [expo.dev](https://expo.dev) → your project → **Builds**.
