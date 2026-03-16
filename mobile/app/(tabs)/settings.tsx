@@ -18,8 +18,9 @@ import {
 
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
-import { useColorScheme } from '../../hooks/use-color-scheme';
+import { useAppColorScheme } from '../../hooks/use-app-color-scheme';
 import { useSettingsStore } from '../../src/stores/settingsStore';
+import { useThemeStore } from '../../src/stores/themeStore';
 import { useAuthStore } from '../../src/stores/authStore';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -139,8 +140,8 @@ interface PickerModalProps {
 }
 
 function PickerModal({ visible, title, options, selected, onSelect, onClose }: PickerModalProps) {
-  const colorScheme = useColorScheme();
-  const theme = Colors[colorScheme ?? 'light'];
+  const colorScheme = useAppColorScheme();
+  const theme = Colors[colorScheme];
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
       <TouchableOpacity style={pickerStyles.overlay} activeOpacity={1} onPress={onClose} />
@@ -233,8 +234,8 @@ const pickerStyles = StyleSheet.create({
 // ─── Settings Screen ──────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
-  const colorScheme = useColorScheme();
-  const theme = Colors[colorScheme ?? 'light'];
+  const colorScheme = useAppColorScheme();
+  const theme = Colors[colorScheme];
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { user } = useAuthStore();
   const {
@@ -249,7 +250,9 @@ export default function SettingsScreen() {
     refreshSettings,
   } = useSettingsStore();
 
-  const [activeSection, setActiveSection] = useState<'general' | 'receipt' | 'tax' | 'hours' | 'features'>('general');
+  const { themePreference, setThemePreference } = useThemeStore();
+
+  const [activeSection, setActiveSection] = useState<'general' | 'receipt' | 'tax' | 'hours' | 'features' | 'appearance'>('general');
   const [isEditing, setIsEditing] = useState(false);
   const [editedSettings, setEditedSettings] = useState<Partial<StoreSettings>>({});
 
@@ -777,6 +780,29 @@ export default function SettingsScreen() {
     }
   };
 
+  const renderAppearanceSettings = () => {
+    return (
+      <View style={styles.sectionContent}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Appearance</Text>
+          <View style={styles.switchGroup}>
+            <View style={styles.featureInfo}>
+              <Text style={styles.label}>Prefer Dark Mode</Text>
+              <Text style={styles.featureDescription}>
+                When enabled, the app will use dark mode even if your device is set to light mode. When disabled, the app
+                follows your device appearance.
+              </Text>
+            </View>
+            <Switch
+              value={themePreference === 'dark'}
+              onValueChange={(value) => setThemePreference(value ? 'dark' : 'system')}
+            />
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading && !refreshing) {
@@ -792,7 +818,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
 
       {/* Picker modal */}
       {picker.type !== null && (
@@ -836,7 +862,7 @@ export default function SettingsScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabScroll}
         >
-          {(['general', 'receipt', 'tax', 'hours', 'features'] as const).map((section) => (
+          {(['general', 'receipt', 'tax', 'hours', 'features', 'appearance'] as const).map((section) => (
             <TouchableOpacity
               key={section}
               style={[styles.tab, activeSection === section && styles.activeTab]}
@@ -889,6 +915,7 @@ export default function SettingsScreen() {
         {activeSection === 'tax' && renderTaxSettings()}
         {activeSection === 'hours' && renderBusinessHours()}
         {activeSection === 'features' && renderFeatures()}
+        {activeSection === 'appearance' && renderAppearanceSettings()}
       </ScrollView>
     </View>
   );

@@ -13,11 +13,15 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../src/stores/productStore';
 import { Category } from '../../src/database/types';
+import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
+import { useAppColorScheme } from '../../hooks/use-app-color-scheme';
 
 export default function NewProductScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { categories, createProduct, isLoading, error, clearError } = useProductStore();
+  const colorScheme = useAppColorScheme();
+  const theme = Colors[colorScheme];
   
   const [formData, setFormData] = useState({
     name: '',
@@ -172,14 +176,19 @@ export default function NewProductScreen() {
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.header, { backgroundColor: theme.cardBg, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.cancelButton}>Cancel</Text>
+          <Text style={[styles.cancelButton, { color: theme.error }]}>Cancel</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>New Product</Text>
+        <Text style={[styles.title, { color: theme.text }]}>New Product</Text>
         <TouchableOpacity onPress={handleSubmit} disabled={isLoading}>
-          <Text style={[styles.saveButton, isLoading && styles.saveButtonDisabled]}>
+          <Text
+            style={[
+              styles.saveButton,
+              { color: isLoading ? theme.gray400 : theme.primary },
+            ]}
+          >
             {isLoading ? 'Saving...' : 'Save'}
           </Text>
         </TouchableOpacity>
@@ -208,7 +217,10 @@ export default function NewProductScreen() {
           <Text style={styles.inputLabel}>Barcode</Text>
           <View style={styles.barcodeInputContainer}>
             <TextInput
-              style={styles.barcodeInput}
+              style={[
+                styles.barcodeInput,
+                { backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text },
+              ]}
               value={formData.barcode}
               onChangeText={(text) => setFormData({ ...formData, barcode: text })}
               placeholder="Enter barcode (optional)"
@@ -217,10 +229,13 @@ export default function NewProductScreen() {
               autoCorrect={false}
             />
             <TouchableOpacity
-              style={styles.barcodeScanButton}
+              style={[
+                styles.barcodeScanButton,
+                { backgroundColor: theme.infoBg, borderColor: theme.info },
+              ]}
               onPress={() => router.push('/barcode-scanner')}
             >
-              <Ionicons name="barcode-outline" size={20} color="#007AFF" />
+              <Ionicons name="barcode-outline" size={20} color={theme.info} />
             </TouchableOpacity>
           </View>
           {validationErrors.barcode && (
@@ -315,8 +330,8 @@ export default function NewProductScreen() {
 
         {isLoading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.loadingText}>Creating product...</Text>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.gray500 }]}>Creating product...</Text>
           </View>
         )}
       </ScrollView>
@@ -327,58 +342,48 @@ export default function NewProductScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
+    padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
   },
   cancelButton: {
-    fontSize: 16,
-    color: '#FF3B30',
+    fontSize: Typography.sizes.md,
   },
   title: {
-    fontSize: 18,
+    fontSize: Typography.sizes.lg,
     fontWeight: '600',
-    color: '#333',
   },
   saveButton: {
-    fontSize: 16,
-    color: '#007AFF',
+    fontSize: Typography.sizes.md,
     fontWeight: '600',
-  },
-  saveButtonDisabled: {
-    color: '#999',
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: Spacing.lg,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: Spacing.md,
   },
   inputLabel: {
-    fontSize: 16,
+    fontSize: Typography.sizes.sm,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+    marginBottom: Spacing.xs,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    backgroundColor: '#fff',
+    borderColor: '#e5e7eb',
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontSize: Typography.sizes.md,
+    backgroundColor: '#FFFFFF',
   },
   inputError: {
-    borderColor: '#FF3B30',
+    borderColor: '#EF4444',
   },
   textArea: {
     height: 80,
@@ -386,46 +391,45 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    gap: 12,
+    gap: Spacing.md,
   },
   selectContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: Spacing.sm,
   },
   selectOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    backgroundColor: '#f3f4f6',
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: '#e5e7eb',
   },
   selectOptionActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
   },
   selectOptionText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: Typography.sizes.sm,
+    color: '#4b5563',
   },
   selectOptionTextActive: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   errorText: {
-    fontSize: 12,
-    color: '#FF3B30',
-    marginTop: 4,
+    fontSize: Typography.sizes.xs,
+    color: '#EF4444',
+    marginTop: Spacing.xs,
   },
   loadingContainer: {
     alignItems: 'center',
-    padding: 32,
+    padding: Spacing.xl,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+    marginTop: Spacing.md,
+    fontSize: Typography.sizes.md,
   },
   barcodeInputContainer: {
     flexDirection: 'row',
@@ -434,22 +438,18 @@ const styles = StyleSheet.create({
   barcodeInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    backgroundColor: '#f9f9f9',
-    marginRight: 8,
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontSize: Typography.sizes.md,
+    marginRight: Spacing.sm,
   },
   barcodeScanButton: {
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: '#f0f8ff',
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: '#007AFF',
   },
   inputContainer: {
-    marginBottom: 16,
+    marginBottom: Spacing.md,
   },
 });

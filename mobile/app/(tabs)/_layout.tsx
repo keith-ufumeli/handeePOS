@@ -5,12 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { HapticTab } from '../../components/haptic-tab';
 import { Colors } from '../../constants/theme';
-import { useColorScheme } from '../../hooks/use-color-scheme';
+import { useAppColorScheme } from '../../hooks/use-app-color-scheme';
 import TabBarSyncBadge from '../../src/components/TabBarSyncBadge';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-  const theme = Colors[colorScheme ?? 'light'];
+  const colorScheme = useAppColorScheme();
+  const theme = Colors[colorScheme];
 
   return (
     <Tabs

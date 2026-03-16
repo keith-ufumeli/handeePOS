@@ -18,15 +18,15 @@ import { useReportStore } from '../../src/stores/reportStore';
 import { useOrderStore } from '../../src/stores/orderStore';
 import { useProductStore } from '../../src/stores/productStore';
 import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../../constants/theme';
-import { useColorScheme } from '../../hooks/use-color-scheme';
+import { useAppColorScheme } from '../../hooks/use-app-color-scheme';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const theme = Colors[colorScheme ?? 'light'];
+  const colorScheme = useAppColorScheme();
+  const theme = Colors[colorScheme];
   const { user, isAuthenticated } = useAuthStore();
   const { dailySummary, fetchDailySummary, loading: reportsLoading, error: reportsError } = useReportStore();
   const { orders, loadOrders, isLoading: ordersLoading } = useOrderStore();

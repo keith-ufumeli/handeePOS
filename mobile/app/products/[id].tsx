@@ -13,11 +13,15 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../src/stores/productStore';
 import { Product } from '../../src/database/types';
+import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../constants/theme';
+import { useAppColorScheme } from '../../hooks/use-app-color-scheme';
 
 export default function ProductDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { categories, getProductById, updateProduct, deleteProduct } = useProductStore();
+  const colorScheme = useAppColorScheme();
+  const theme = Colors[colorScheme];
   
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,130 +111,152 @@ export default function ProductDetailScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading product...</Text>
+      <View style={[styles.centerContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.gray500 }]}>Loading product...</Text>
       </View>
     );
   }
 
   if (!product) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>Product not found</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Go Back</Text>
+      <View style={[styles.centerContainer, { backgroundColor: theme.background }]}>
+        <Text style={[styles.errorText, { color: theme.error }]}>Product not found</Text>
+        <TouchableOpacity
+          style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+          onPress={() => router.back()}
+        >
+          <Text style={[styles.primaryButtonText, { color: theme.white }]}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.header, { backgroundColor: theme.cardBg, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={[styles.backButtonText, { color: theme.primary }]}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title} numberOfLines={1}>{product.name}</Text>
+        <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
+          {product.name}
+        </Text>
         <TouchableOpacity onPress={handleEdit}>
-          <Text style={styles.editButton}>Edit</Text>
+          <Text style={[styles.editButton, { color: theme.accent }]}>Edit</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.productCard}>
+        <View style={[styles.productCard, { backgroundColor: theme.cardBg, shadowColor: '#000' }]}>
           <View style={styles.productHeader}>
-            <Text style={styles.productName}>{product.name}</Text>
-            <Text style={styles.productSku}>{product.sku}</Text>
+            <Text style={[styles.productName, { color: theme.text }]}>{product.name}</Text>
+            <Text
+              style={[
+                styles.productSku,
+                { color: theme.gray600, backgroundColor: theme.inputBg, borderColor: theme.border },
+              ]}
+            >
+              {product.sku}
+            </Text>
           </View>
 
           {product.barcode && (
             <View style={styles.productRow}>
-              <Text style={styles.label}>Barcode:</Text>
-              <Text style={styles.value}>{product.barcode}</Text>
+              <Text style={[styles.label, { color: theme.gray600 }]}>Barcode:</Text>
+              <Text style={[styles.value, { color: theme.text }]}>{product.barcode}</Text>
             </View>
           )}
 
           <View style={styles.productRow}>
-            <Text style={styles.label}>Category:</Text>
-            <Text style={styles.value}>
+            <Text style={[styles.label, { color: theme.gray600 }]}>Category:</Text>
+            <Text style={[styles.value, { color: theme.text }]}>
               {categories.find(c => (c.serverId || c.id) === product.categoryId)?.name || product.categoryId}
             </Text>
           </View>
 
           <View style={styles.priceRow}>
             <View style={styles.priceItem}>
-              <Text style={styles.label}>Price:</Text>
-              <Text style={styles.priceValue}>${product.price.toFixed(2)}</Text>
+              <Text style={[styles.label, { color: theme.gray600 }]}>Price:</Text>
+              <Text style={[styles.priceValue, { color: theme.primary }]}>${product.price.toFixed(2)}</Text>
             </View>
             <View style={styles.priceItem}>
-              <Text style={styles.label}>Cost:</Text>
-              <Text style={styles.costValue}>${product.cost.toFixed(2)}</Text>
+              <Text style={[styles.label, { color: theme.gray600 }]}>Cost:</Text>
+              <Text style={[styles.costValue, { color: theme.error }]}>${product.cost.toFixed(2)}</Text>
             </View>
           </View>
 
           <View style={styles.productRow}>
-            <Text style={styles.label}>Profit Margin:</Text>
-            <Text style={styles.value}>{(product.profitMargin ?? 0).toFixed(1)}%</Text>
+            <Text style={[styles.label, { color: theme.gray600 }]}>Profit Margin:</Text>
+            <Text style={[styles.value, { color: theme.text }]}>{(product.profitMargin ?? 0).toFixed(1)}%</Text>
           </View>
 
           <View style={styles.productRow}>
-            <Text style={styles.label}>Tax Rate:</Text>
-            <Text style={styles.value}>{product.taxRate}%</Text>
+            <Text style={[styles.label, { color: theme.gray600 }]}>Tax Rate:</Text>
+            <Text style={[styles.value, { color: theme.text }]}>{product.taxRate}%</Text>
           </View>
 
           <View style={styles.stockRow}>
             <View style={styles.stockItem}>
-              <Text style={styles.label}>Stock:</Text>
-              <Text style={[
-                styles.stockValue,
-                product.isLowStock && styles.lowStockValue
-              ]}>
+              <Text style={[styles.label, { color: theme.gray600 }]}>Stock:</Text>
+              <Text
+                style={[
+                  styles.stockValue,
+                  { color: theme.text },
+                  product.isLowStock && { color: theme.error },
+                ]}
+              >
                 {product.stockQuantity} {product.unit}
               </Text>
             </View>
             <View style={styles.stockItem}>
-              <Text style={styles.label}>Low Stock Threshold:</Text>
-              <Text style={styles.value}>{product.lowStockThreshold}</Text>
+              <Text style={[styles.label, { color: theme.gray600 }]}>Low Stock Threshold:</Text>
+              <Text style={[styles.value, { color: theme.text }]}>{product.lowStockThreshold}</Text>
             </View>
           </View>
 
           {product.isLowStock && (
-            <View style={styles.lowStockWarning}>
+            <View
+              style={[
+                styles.lowStockWarning,
+                { backgroundColor: theme.warningBg, borderLeftColor: theme.warning },
+              ]}
+            >
               <View style={styles.lowStockContainer}>
-                <Ionicons name="warning" size={16} color="#f59e0b" />
-                <Text style={styles.lowStockText}>Low Stock Alert</Text>
+                <Ionicons name="warning" size={16} color={theme.warning} />
+                <Text style={[styles.lowStockText, { color: theme.warning }]}>Low Stock Alert</Text>
               </View>
             </View>
           )}
 
           <View style={styles.productRow}>
-            <Text style={styles.label}>Status:</Text>
-            <Text style={[
-              styles.statusValue,
-              product.isActive ? styles.activeStatus : styles.inactiveStatus
-            ]}>
+            <Text style={[styles.label, { color: theme.gray600 }]}>Status:</Text>
+            <Text
+              style={[
+                styles.statusValue,
+                product.isActive ? { color: theme.success } : { color: theme.error },
+              ]}
+            >
               {product.isActive ? 'Active' : 'Inactive'}
             </Text>
           </View>
 
           <View style={styles.productRow}>
-            <Text style={styles.label}>Sync Status:</Text>
+            <Text style={[styles.label, { color: theme.gray600 }]}>Sync Status:</Text>
             <View style={styles.syncStatusContainer}>
               {product.syncStatus === 'synced' ? (
                 <View style={styles.syncStatusRow}>
-                  <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-                  <Text style={styles.syncStatusText}>Synced</Text>
+                  <Ionicons name="checkmark-circle" size={16} color={theme.success} />
+                  <Text style={[styles.syncStatusText, { color: theme.gray600 }]}>Synced</Text>
                 </View>
               ) : product.syncStatus === 'pending' ? (
                 <View style={styles.syncStatusRow}>
-                  <Ionicons name="time" size={16} color="#f59e0b" />
-                  <Text style={styles.syncStatusText}>Pending</Text>
+                  <Ionicons name="time" size={16} color={theme.warning} />
+                  <Text style={[styles.syncStatusText, { color: theme.gray600 }]}>Pending</Text>
                 </View>
               ) : (
                 <View style={styles.syncStatusRow}>
-                  <Ionicons name="close-circle" size={16} color="#ef4444" />
-                  <Text style={styles.syncStatusText}>Failed</Text>
+                  <Ionicons name="close-circle" size={16} color={theme.error} />
+                  <Text style={[styles.syncStatusText, { color: theme.gray600 }]}>Failed</Text>
                 </View>
               )}
             </View>
@@ -238,8 +264,8 @@ export default function ProductDetailScreen() {
 
           {product.lastSyncedAt && (
             <View style={styles.productRow}>
-              <Text style={styles.label}>Last Synced:</Text>
-              <Text style={styles.value}>
+              <Text style={[styles.label, { color: theme.gray600 }]}>Last Synced:</Text>
+              <Text style={[styles.value, { color: theme.text }]}>
                 {new Date(product.lastSyncedAt).toLocaleString()}
               </Text>
             </View>
@@ -247,19 +273,25 @@ export default function ProductDetailScreen() {
         </View>
 
         <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleStockUpdate}>
-            <Text style={styles.actionButtonText}>Update Stock</Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+            onPress={handleStockUpdate}
+          >
+            <Text style={[styles.primaryButtonText, { color: theme.white }]}>Update Stock</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionButton} onPress={handleEdit}>
-            <Text style={styles.actionButtonText}>Edit Product</Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: theme.accent }]}
+            onPress={handleEdit}
+          >
+            <Text style={[styles.primaryButtonText, { color: theme.white }]}>Edit Product</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.deleteButton]} 
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: theme.error }]}
             onPress={handleDelete}
           >
-            <Text style={[styles.actionButtonText, styles.deleteButtonText]}>
+            <Text style={[styles.primaryButtonText, { color: theme.white }]}>
               Delete Product
             </Text>
           </TouchableOpacity>
@@ -272,48 +304,37 @@ export default function ProductDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
+    padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
   },
   backButtonText: {
-    fontSize: 16,
-    color: '#007AFF',
+    fontSize: Typography.sizes.md,
   },
   title: {
     flex: 1,
-    fontSize: 17,
+    fontSize: Typography.sizes.lg,
     fontWeight: '600',
-    color: '#333',
     textAlign: 'center',
-    marginHorizontal: 8,
+    marginHorizontal: Spacing.sm,
   },
   editButton: {
-    fontSize: 16,
-    color: '#007AFF',
+    fontSize: Typography.sizes.md,
     fontWeight: '600',
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: Spacing.lg,
   },
   productCard: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    ...Shadows.md,
   },
   productHeader: {
     flexDirection: 'row',
@@ -322,18 +343,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   productName: {
-    fontSize: 20,
+    fontSize: Typography.sizes.xl,
     fontWeight: 'bold',
-    color: '#333',
     flex: 1,
   },
   productSku: {
-    fontSize: 12,
-    color: '#666',
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 8,
+    fontSize: Typography.sizes.xs,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: 4,
-    borderRadius: 4,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
   },
   productRow: {
     flexDirection: 'row',
@@ -342,13 +361,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   label: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: Typography.sizes.sm,
     fontWeight: '500',
   },
   value: {
-    fontSize: 16,
-    color: '#333',
+    fontSize: Typography.sizes.sm,
     fontWeight: '600',
   },
   priceRow: {
@@ -360,13 +377,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   priceValue: {
-    fontSize: 18,
-    color: '#34C759',
+    fontSize: Typography.sizes.lg,
     fontWeight: 'bold',
   },
   costValue: {
-    fontSize: 16,
-    color: '#FF3B30',
+    fontSize: Typography.sizes.md,
     fontWeight: '600',
   },
   stockRow: {
@@ -378,40 +393,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stockValue: {
-    fontSize: 16,
-    color: '#333',
+    fontSize: Typography.sizes.sm,
     fontWeight: '600',
   },
-  lowStockValue: {
-    color: '#FF3B30',
-  },
   lowStockWarning: {
-    backgroundColor: '#FFE6E6',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.md,
     borderLeftWidth: 4,
-    borderLeftColor: '#FF3B30',
   },
   lowStockContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   lowStockText: {
-    color: '#f59e0b',
     fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 4,
+    fontSize: Typography.sizes.sm,
+    marginLeft: Spacing.xs,
   },
   statusValue: {
-    fontSize: 16,
+    fontSize: Typography.sizes.sm,
     fontWeight: '600',
-  },
-  activeStatus: {
-    color: '#34C759',
-  },
-  inactiveStatus: {
-    color: '#FF3B30',
   },
   syncStatusContainer: {
     alignItems: 'flex-end',
@@ -421,52 +423,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   syncStatusText: {
-    fontSize: 16,
+    fontSize: Typography.sizes.sm,
     fontWeight: '600',
-    color: '#666',
-    marginLeft: 4,
+    marginLeft: Spacing.xs,
   },
   actionsContainer: {
-    gap: 12,
+    gap: Spacing.md,
   },
-  actionButton: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
+  primaryButton: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.lg,
     alignItems: 'center',
   },
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  primaryButtonText: {
+    fontSize: Typography.sizes.md,
     fontWeight: '600',
-  },
-  deleteButton: {
-    backgroundColor: '#FF3B30',
-  },
-  deleteButtonText: {
-    color: '#fff',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: Spacing.xl,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+    marginTop: Spacing.md,
+    fontSize: Typography.sizes.md,
   },
   errorText: {
-    fontSize: 18,
-    color: '#FF3B30',
-    marginBottom: 16,
-  },
-  backButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    fontSize: Typography.sizes.lg,
+    marginBottom: Spacing.md,
   },
 });

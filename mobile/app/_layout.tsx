@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '../hooks/use-color-scheme';
+import { useAppColorScheme } from '../hooks/use-app-color-scheme';
 import SyncStatusProvider from '../src/components/SyncStatusProvider';
 import AuthToast from '../src/components/AuthToast';
 
@@ -13,7 +13,7 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  const colorScheme = useAppColorScheme();
 
   useEffect(() => {
     // Log initialization for debugging
@@ -40,7 +40,7 @@ export default function RootLayout() {
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Info' }} />
         </Stack>
         <AuthToast />
-        <StatusBar style="auto" />
+        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       </SyncStatusProvider>
     </ThemeProvider>
   );

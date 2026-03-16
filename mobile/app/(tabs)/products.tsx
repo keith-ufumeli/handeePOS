@@ -16,7 +16,7 @@ import { useProductStore } from '../../src/stores/productStore';
 import { useAuthStore } from '../../src/stores/authStore';
 import { Product } from '../../src/database/types';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
-import { useColorScheme } from '../../hooks/use-color-scheme';
+import { useAppColorScheme } from '../../hooks/use-app-color-scheme';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -24,8 +24,8 @@ import { Badge } from '../../components/ui/Badge';
 
 export default function ProductsScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const theme = Colors[colorScheme ?? 'light'];
+  const colorScheme = useAppColorScheme();
+  const theme = Colors[colorScheme];
   const { isAuthenticated } = useAuthStore();
   const {
     products,
