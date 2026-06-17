@@ -16,7 +16,12 @@ export const validateLogin: ValidationChain[] = [
     .isLength({ min: 6 })
     .withMessage('Password must be at least 6 characters long')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number')
+    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
+  
+  body('rememberMe')
+    .optional()
+    .isBoolean()
+    .withMessage('Remember me must be a boolean value')
 ];
 
 /**
@@ -28,6 +33,37 @@ export const validateRefreshToken: ValidationChain[] = [
     .withMessage('Refresh token is required')
     .isString()
     .withMessage('Refresh token must be a string')
+];
+
+/**
+ * Change password validation rules
+ */
+/**
+ * Password recovery request validation rules
+ */
+export const validateForgotPassword: ValidationChain[] = [
+  body('email')
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail()
+    .toLowerCase()
+];
+
+/**
+ * Password reset validation rules
+ */
+export const validateResetPassword: ValidationChain[] = [
+  body('token')
+    .notEmpty()
+    .withMessage('Reset token is required')
+    .isString()
+    .withMessage('Reset token must be a string'),
+  
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters long')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number')
 ];
 
 /**
@@ -54,7 +90,7 @@ export const validateChangePassword: ValidationChain[] = [
 /**
  * User registration validation rules
  */
-export const validateUserRegistration: ValidationChain[] = [
+export const validateRegister: ValidationChain[] = [
   body('email')
     .isEmail()
     .withMessage('Please provide a valid email')
@@ -72,18 +108,36 @@ export const validateUserRegistration: ValidationChain[] = [
     .withMessage('Full name must be between 2 and 100 characters')
     .trim(),
   
-  body('role')
-    .isIn(['admin', 'manager', 'cashier', 'inventory'])
-    .withMessage('Role must be one of: admin, manager, cashier, inventory'),
-  
-  body('storeId')
-    .isMongoId()
-    .withMessage('Store ID must be a valid MongoDB ObjectId'),
-  
   body('phoneNumber')
     .optional()
     .isMobilePhone('any')
     .withMessage('Please provide a valid phone number')
+];
+
+/**
+ * Device registration validation rules
+ */
+export const validateDeviceRegister: ValidationChain[] = [
+  body('deviceId')
+    .notEmpty()
+    .withMessage('Device ID is required')
+    .isString()
+    .isLength({ min: 1, max: 128 })
+    .withMessage('Device ID must be between 1 and 128 characters'),
+  body('deviceName')
+    .optional()
+    .isString()
+    .isLength({ max: 100 })
+    .withMessage('Device name must be at most 100 characters'),
+  body('platform')
+    .optional()
+    .isIn(['ios', 'android', 'web'])
+    .withMessage('Platform must be ios, android, or web'),
+  body('appVersion')
+    .optional()
+    .isString()
+    .isLength({ max: 20 })
+    .withMessage('App version must be at most 20 characters'),
 ];
 
 /**
@@ -145,6 +199,16 @@ export const validateRequest = (req: Request, res: Response, next: NextFunction)
   
   if (!errors.isEmpty()) {
     const errorMessages: Record<string, string[]> = {};
+    
+    // Log validation errors for debugging
+    console.log('[VALIDATION] Validation errors detected:', {
+      url: req.url,
+      path: req.path,
+      method: req.method,
+      params: req.params,
+      query: req.query,
+      errors: errors.array()
+    });
     
     errors.array().forEach((error: any) => {
       const field = error.path || error.param;

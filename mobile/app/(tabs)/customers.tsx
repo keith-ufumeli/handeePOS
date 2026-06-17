@@ -12,8 +12,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCustomerStore } from '@/stores/customerStore';
-import { useAuthStore } from '@/stores/authStore';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
+import { useCustomerStore } from '../../src/stores/customerStore';
+import { useAuthStore } from '../../src/stores/authStore';
 
 interface Customer {
   _id: string;
@@ -29,6 +31,8 @@ interface Customer {
 
 export default function CustomersScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const { user } = useAuthStore();
   const {
     customers,
@@ -78,7 +82,7 @@ export default function CustomersScreen() {
       case 'silver': return '#C0C0C0';
       case 'gold': return '#FFD700';
       case 'platinum': return '#E5E4E2';
-      default: return '#6B7280';
+      default: return theme.gray500;
     }
   };
 
@@ -96,15 +100,15 @@ export default function CustomersScreen() {
 
   const renderCustomer = ({ item }: { item: Customer }) => (
     <TouchableOpacity
-      style={styles.customerCard}
-      onPress={() => router.push(`/customers/${item._id}`)}
+      style={[styles.customerCard, { backgroundColor: theme.cardBg }]}
+      onPress={() => router.push(`/customers/${item._id}` as any)}
     >
       <View style={styles.customerHeader}>
         <View style={styles.customerInfo}>
-          <Text style={styles.customerName}>{item.name}</Text>
+          <Text style={[styles.customerName, { color: theme.text }]}>{item.name}</Text>
           <View style={styles.tierContainer}>
             <View style={[styles.tierBadge, { backgroundColor: getTierColor(item.tier) }]}>
-              <Text style={styles.tierText}>{item.tier.toUpperCase()}</Text>
+              <Text style={[styles.tierText, { color: theme.white }]}>{item.tier.toUpperCase()}</Text>
             </View>
           </View>
         </View>
@@ -112,38 +116,38 @@ export default function CustomersScreen() {
           style={styles.deleteButton}
           onPress={() => handleDeleteCustomer(item._id, item.name)}
         >
-          <Ionicons name="trash-outline" size={20} color="#EF4444" />
+          <Ionicons name="trash-outline" size={20} color={theme.error} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.customerDetails}>
         {item.email && (
           <View style={styles.detailRow}>
-            <Ionicons name="mail-outline" size={16} color="#6B7280" />
-            <Text style={styles.detailText}>{item.email}</Text>
+            <Ionicons name="mail-outline" size={16} color={theme.gray500} />
+            <Text style={[styles.detailText, { color: theme.gray500 }]}>{item.email}</Text>
           </View>
         )}
         {item.phoneNumber && (
           <View style={styles.detailRow}>
-            <Ionicons name="call-outline" size={16} color="#6B7280" />
-            <Text style={styles.detailText}>{item.phoneNumber}</Text>
+            <Ionicons name="call-outline" size={16} color={theme.gray500} />
+            <Text style={[styles.detailText, { color: theme.gray500 }]}>{item.phoneNumber}</Text>
           </View>
         )}
         <View style={styles.detailRow}>
-          <Ionicons name="cash-outline" size={16} color="#6B7280" />
-          <Text style={styles.detailText}>{formatCurrency(item.totalSpent)}</Text>
+          <Ionicons name="cash-outline" size={16} color={theme.gray500} />
+          <Text style={[styles.detailText, { color: theme.gray500 }]}>{formatCurrency(item.totalSpent)}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Ionicons name="receipt-outline" size={16} color="#6B7280" />
-          <Text style={styles.detailText}>{item.totalOrders} orders</Text>
+          <Ionicons name="receipt-outline" size={16} color={theme.gray500} />
+          <Text style={[styles.detailText, { color: theme.gray500 }]}>{item.totalOrders} orders</Text>
         </View>
         <View style={styles.detailRow}>
-          <Ionicons name="star-outline" size={16} color="#6B7280" />
-          <Text style={styles.detailText}>{item.loyaltyPoints} points</Text>
+          <Ionicons name="star-outline" size={16} color={theme.gray500} />
+          <Text style={[styles.detailText, { color: theme.gray500 }]}>{item.loyaltyPoints} points</Text>
         </View>
         <View style={styles.detailRow}>
-          <Ionicons name="time-outline" size={16} color="#6B7280" />
-          <Text style={styles.detailText}>Last visit: {formatDate(item.lastVisit)}</Text>
+          <Ionicons name="time-outline" size={16} color={theme.gray500} />
+          <Text style={[styles.detailText, { color: theme.gray500 }]}>Last visit: {formatDate(item.lastVisit)}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -151,9 +155,9 @@ export default function CustomersScreen() {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="people-outline" size={64} color="#9CA3AF" />
-      <Text style={styles.emptyTitle}>No customers found</Text>
-      <Text style={styles.emptySubtitle}>
+      <Ionicons name="people-outline" size={64} color={theme.gray400} />
+      <Text style={[styles.emptyTitle, { color: theme.gray700 }]}>No customers found</Text>
+      <Text style={[styles.emptySubtitle, { color: theme.gray500 }]}>
         {searchQuery ? 'Try adjusting your search terms' : 'Add your first customer to get started'}
       </Text>
     </View>
@@ -161,35 +165,35 @@ export default function CustomersScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={styles.loadingText}>Loading customers...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
+        <Text style={[styles.loadingText, { color: theme.gray500 }]}>Loading customers...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Customers</Text>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.header, { backgroundColor: theme.cardBg, borderBottomColor: theme.border }]}>
+        <Text style={[styles.title, { color: theme.text }]}>Customers</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.searchButton}
             onPress={() => setShowSearch(!showSearch)}
           >
-            <Ionicons name="search-outline" size={24} color="#3B82F6" />
+            <Ionicons name="search-outline" size={24} color={theme.accent} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => router.push('/customers/new')}
+            style={[styles.addButton, { backgroundColor: theme.primary }]}
+            onPress={() => router.push('/customers/new' as any)}
           >
-            <Ionicons name="add" size={24} color="#FFFFFF" />
+            <Ionicons name="add" size={24} color={theme.white} />
           </TouchableOpacity>
         </View>
       </View>
 
       {showSearch && (
-        <View style={styles.searchContainer}>
+        <View style={[styles.searchContainer, { backgroundColor: theme.cardBg, borderBottomColor: theme.border }]}>
           <TextInput
             style={styles.searchInput}
             placeholder="Search customers..."
@@ -204,7 +208,7 @@ export default function CustomersScreen() {
               fetchCustomers();
             }}
           >
-            <Ionicons name="close" size={20} color="#6B7280" />
+            <Ionicons name="close" size={20} color={theme.gray500} />
           </TouchableOpacity>
         </View>
       )}
@@ -218,8 +222,8 @@ export default function CustomersScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={refreshCustomers}
-            colors={['#3B82F6']}
-            tintColor="#3B82F6"
+            colors={[theme.accent]}
+            tintColor={theme.accent}
           />
         }
         ListEmptyComponent={renderEmptyState}

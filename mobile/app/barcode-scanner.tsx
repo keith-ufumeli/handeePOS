@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import BarcodeScanner from '@/src/components/BarcodeScanner';
-import { useProductStore } from '@/src/stores/productStore';
+import BarcodeScanner from '../src/components/BarcodeScanner';
+import { useProductStore } from '../src/stores/productStore';
 
 export default function BarcodeScannerScreen() {
   const router = useRouter();

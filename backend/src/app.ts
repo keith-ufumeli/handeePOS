@@ -7,26 +7,30 @@ import dotenv from 'dotenv';
 import swaggerUi from 'swagger-ui-express';
 
 // Import database connection
-import connectDB from '@/config/database';
-import { swaggerSpec } from '@/config/swagger';
+import connectDB from './config/database';
+import { swaggerSpec } from './config/swagger';
 
 // Import routes
-import indexRoutes from '@/routes/index';
-import authRoutes from '@/routes/auth';
-import productRoutes from '@/routes/products';
-import orderRoutes from '@/routes/orders';
-import customerRoutes from '@/routes/customers';
-import reportRoutes from '@/routes/reports';
-import settingsRoutes from '@/routes/settings';
+import indexRoutes from './routes/index';
+import authRoutes from './routes/auth';
+import productRoutes from './routes/products';
+import orderRoutes from './routes/orders';
+import customerRoutes from './routes/customers';
+import reportRoutes from './routes/reports';
+import settingsRoutes from './routes/settings';
+import syncRoutes from './routes/sync';
+import inventoryRoutes from './routes/inventory';
 
 // Import error handling middleware
-import { errorHandler, notFound } from '@/middleware/errorHandler';
+import { errorHandler, notFound } from './middleware/errorHandler';
 
 // Load environment variables based on NODE_ENV
 const envFile = process.env['NODE_ENV'] === 'production' ? '.env.prod' : '.env.local';
 dotenv.config({ path: envFile });
 
 const app = express();
+// Trust the reverse proxy (like Render or Vercel) to fix express-rate-limit validation errors
+app.set('trust proxy', 1);
 const PORT = parseInt(process.env['PORT'] || '3000', 10);
 
 // Middleware
@@ -65,6 +69,8 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/sync', syncRoutes);
+app.use('/api/inventory', inventoryRoutes);
 
 // Root route
 app.get('/', (_req, res) => {
@@ -80,6 +86,8 @@ app.get('/', (_req, res) => {
       customers: '/api/customers',
       reports: '/api/reports',
       settings: '/api/settings',
+      sync: '/api/sync',
+      inventory: '/api/inventory',
       docs: '/api-docs'
     }
   });
@@ -96,12 +104,12 @@ const startServer = async () => {
   try {
     // Connect to MongoDB
     await connectDB();
-    
+
     // Start server
-    app.listen(PORT, 'localhost', () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 HandeePOS Backend running on port ${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/health`);
-      console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
+      console.log(`📊 Health check: http://0.0.0.0:${PORT}/health`);
+      console.log(`📚 API Documentation: http://0.0.0.0:${PORT}/api-docs`);
       console.log(`🌍 Environment: ${process.env['NODE_ENV'] || 'development'}`);
     });
   } catch (error) {

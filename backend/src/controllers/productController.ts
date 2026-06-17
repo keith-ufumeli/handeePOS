@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import Product from '@/models/Product';
 import Category from '@/models/Category';
+import InventoryAdjustment from '@/models/InventoryAdjustment';
 import { sendSuccess, sendError } from '@/utils/response';
 import logger from '@/utils/logger';
 import { TokenPayload } from '@/services/authService';
@@ -22,7 +23,8 @@ export class ProductController {
         limit = 50, 
         sortBy = 'name', 
         sortOrder = 'asc',
-        lowStock = false 
+        lowStock = false,
+        updatedAfter
       } = req.query;
 
       const storeId = req.user?.storeId;
@@ -33,6 +35,16 @@ export class ProductController {
 
       // Build query
       const query: any = { storeId, isActive: true };
+
+      // Incremental pull: only documents updated on or after this time (ISO or timestamp ms)
+      if (updatedAfter) {
+        const after = typeof updatedAfter === 'string' && /^\d+$/.test(updatedAfter)
+          ? new Date(Number(updatedAfter))
+          : new Date(updatedAfter as string);
+        if (!isNaN(after.getTime())) {
+          query.updatedAt = { $gte: after };
+        }
+      }
 
       // Add search filter
       if (search) {
@@ -71,7 +83,7 @@ export class ProductController {
         Product.countDocuments(query)
       ]);
 
-      sendSuccess(res, {
+      const payload: any = {
         products,
         pagination: {
           page: Number(page),
@@ -79,7 +91,11 @@ export class ProductController {
           total,
           pages: Math.ceil(total / Number(limit))
         }
-      });
+      };
+      if (updatedAfter !== undefined) {
+        payload.serverTimestamp = new Date().toISOString();
+      }
+      sendSuccess(res, payload);
     } catch (error) {
       logger.error('Error fetching products:', error);
       sendError(res, 'Failed to fetch products', 500);
@@ -186,13 +202,14 @@ export class ProductController {
   }
 
   /**
-   * Update a product
+   * Update a product.
+   * Optional optimistic concurrency: send syncVersion in body; if it does not match server, returns 409.
    */
   static async updateProduct(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { id } = req.params;
       const storeId = req.user?.storeId;
-      const updateData = req.body;
+      const updateData = { ...req.body };
 
       if (!storeId) {
         sendError(res, 'Store ID not found', 400);
@@ -205,6 +222,18 @@ export class ProductController {
         sendError(res, 'Product not found', 404);
         return;
       }
+
+      // Optional syncVersion: conflict detection for offline sync
+      const clientSyncVersion = updateData.syncVersion != null ? Number(updateData.syncVersion) : undefined;
+      if (clientSyncVersion !== undefined && existingProduct.syncVersion !== clientSyncVersion) {
+        res.status(409).json({
+          success: false,
+          message: 'Product was updated elsewhere; refresh and retry',
+          code: 'SYNC_CONFLICT',
+        });
+        return;
+      }
+      delete updateData.syncVersion; // do not write client value; we increment server-side
 
       // Check for SKU conflicts (if SKU is being updated)
       if (updateData.sku && updateData.sku !== existingProduct.sku) {
@@ -248,9 +277,10 @@ export class ProductController {
         }
       }
 
+      // findByIdAndUpdate does not run pre('save'), so increment syncVersion explicitly
       const updatedProduct = await Product.findByIdAndUpdate(
         id,
-        { ...updateData, storeId },
+        { ...updateData, storeId, $inc: { syncVersion: 1 } },
         { new: true, runValidators: true }
       ).populate('categoryId', 'name');
 
@@ -366,6 +396,7 @@ export class ProductController {
       const { id } = req.params;
       const { stockQuantity, reason } = req.body;
       const storeId = req.user?.storeId;
+      const performedBy = req.user?.userId ?? 'system';
 
       if (!storeId) {
         sendError(res, 'Store ID not found', 400);
@@ -376,6 +407,15 @@ export class ProductController {
         sendError(res, 'Stock quantity cannot be negative', 400);
         return;
       }
+
+      const existing = await Product.findOne({ _id: id, storeId, isActive: true });
+      if (!existing) {
+        sendError(res, 'Product not found', 404);
+        return;
+      }
+
+      const previousQuantity = existing.stockQuantity;
+      const delta = stockQuantity - previousQuantity;
 
       const product = await Product.findOneAndUpdate(
         { _id: id, storeId, isActive: true },
@@ -388,7 +428,17 @@ export class ProductController {
         return;
       }
 
-      // Log stock adjustment
+      const reasonValue = ['sale', 'restock', 'adjustment', 'return', 'cancellation'].includes(reason) ? reason : 'adjustment';
+      await InventoryAdjustment.create({
+        storeId,
+        productId: id,
+        previousQuantity,
+        newQuantity: stockQuantity,
+        delta,
+        reason: reasonValue,
+        performedBy,
+      });
+
       logger.info(`Stock updated for product ${product.name}: ${stockQuantity} (${reason || 'Manual adjustment'})`);
 
       sendSuccess(res, product, 'Stock updated successfully');

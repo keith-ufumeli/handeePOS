@@ -1,14 +1,16 @@
 import { Request, Response } from 'express';
 import User from '@/models/User';
+import RefreshToken from '@/models/RefreshToken';
 import authService from '@/services/authService';
 import logger from '@/utils/logger';
 import { validationResult } from 'express-validator';
+import mongoose from 'mongoose';
 
 export class AuthController {
   /**
-   * User login
+   * User registration
    */
-  async login(req: Request, res: Response): Promise<void> {
+  async register(req: Request, res: Response): Promise<void> {
     try {
       // Check validation errors
       const errors = validationResult(req);
@@ -21,7 +23,86 @@ export class AuthController {
         return;
       }
 
-      const { email, password } = req.body;
+      const { fullName, email, password } = req.body;
+
+      // Check if user already exists
+      const existingUser = await User.findOne({ email: email.toLowerCase() });
+      if (existingUser) {
+        res.status(400).json({
+          success: false,
+          message: 'Email already registered'
+        });
+        return;
+      }
+
+      // Hash password
+      const passwordHash = await authService.hashPassword(password);
+
+      // Create new user
+      const user = await User.create({
+        email: email.toLowerCase(),
+        passwordHash,
+        fullName,
+        role: 'user', // Default role
+        permissions: ['basic_access'], // Default permissions
+        isActive: true
+      });
+
+      logger.info(`New user registered: ${user.email}`);
+
+      // Generate tokens
+      const tokens = authService.generateTokens(user);
+
+      res.status(201).json({
+        success: true,
+        message: 'Registration successful',
+        data: {
+          user: {
+            id: user._id,
+            email: user.email,
+            fullName: user.fullName,
+            role: user.role,
+            permissions: user.permissions
+          },
+          tokens
+        }
+      });
+
+    } catch (error) {
+      logger.error('Registration error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+
+  /**
+   * User login
+   */
+  async login(req: Request, res: Response): Promise<void> {
+    try {
+      logger.info('[AUTH] Login request received', {
+        email: req.body.email,
+        rememberMe: req.body.rememberMe,
+        ip: req.ip,
+        userAgent: req.get('user-agent')
+      });
+
+      // Check validation errors
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        logger.warn('[AUTH] Login validation failed', { errors: errors.array() });
+        res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array()
+        });
+        return;
+      }
+
+      const { email, password, rememberMe = false } = req.body;
+      logger.info('[AUTH] Processing login for email:', email.toLowerCase());
 
       // Find user by email
       const user = await User.findOne({ 
@@ -30,16 +111,20 @@ export class AuthController {
       }).populate('storeId');
 
       if (!user) {
+        logger.warn('[AUTH] Login failed - user not found or inactive', { email: email.toLowerCase() });
         res.status(401).json({
           success: false,
           message: 'Invalid email or password'
         });
         return;
       }
+
+      logger.info('[AUTH] User found, verifying password', { userId: user._id, email: user.email });
 
       // Verify password
       const isPasswordValid = await authService.comparePassword(password, user.passwordHash);
       if (!isPasswordValid) {
+        logger.warn('[AUTH] Login failed - invalid password', { userId: user._id, email: user.email });
         res.status(401).json({
           success: false,
           message: 'Invalid email or password'
@@ -47,14 +132,67 @@ export class AuthController {
         return;
       }
 
-      // Generate tokens
-      const tokens = authService.generateTokens(user);
+      logger.info('[AUTH] Password verified, generating tokens', { userId: user._id, rememberMe });
+
+      // Generate tokens with remember me option
+      const tokens = authService.generateTokens(user, rememberMe);
+      logger.info('[AUTH] Tokens generated successfully', {
+        userId: user._id,
+        hasAccessToken: !!tokens.accessToken,
+        hasRefreshToken: !!tokens.refreshToken
+      });
+
+      // Store refresh token in database for rotation tracking
+      const expiresIn = rememberMe
+        ? process.env['JWT_REFRESH_EXPIRES_IN_REMEMBERED'] || '180d'
+        : process.env['JWT_REFRESH_EXPIRES_IN'] || '90d';
+
+      const deviceId = req.get('x-device-id');
+      const deviceName = req.get('x-device-name');
+      const platform = req.get('x-device-platform');
+      const appVersion = req.get('x-app-version');
+      const deviceInfo = {
+        ...(deviceId && { deviceId }),
+        ...(deviceName && { deviceName }),
+        ...(platform && { platform }),
+        ...(appVersion && { appVersion }),
+      };
+
+      await authService.storeRefreshToken(
+        tokens.refreshToken,
+        new mongoose.Types.ObjectId(user._id),
+        expiresIn,
+        deviceInfo,
+        req.ip,
+        req.get('user-agent')
+      );
 
       // Update last login
       user.lastLogin = new Date();
       await user.save();
 
-      logger.info(`User ${user.email} logged in successfully`);
+      // Issue Offline Capability Token (OCT) if deviceId provided and secret configured.
+      // The mobile client will encrypt this before storing it (handled in P4).
+      let offlineCapabilityToken: string | undefined;
+      if (deviceId) {
+        try {
+          const tokenPayload = authService.verifyAccessToken(tokens.accessToken);
+          offlineCapabilityToken = authService.generateOfflineCapabilityToken(tokenPayload, deviceId);
+          logger.info('[AUTH] OCT issued', { userId: user._id, deviceId });
+        } catch (octError) {
+          logger.warn('[AUTH] OCT generation skipped (JWT_DEVICE_SECRET may not be configured)', {
+            error: octError instanceof Error ? octError.message : String(octError),
+          });
+        }
+      }
+
+      logger.info('[AUTH] User logged in successfully', {
+        userId: user._id,
+        email: user.email,
+        role: user.role,
+        storeId: user.storeId?._id || user.storeId,
+        octIssued: !!offlineCapabilityToken,
+      });
 
       res.status(200).json({
         success: true,
@@ -70,12 +208,19 @@ export class AuthController {
             lastLogin: user.lastLogin
           },
           store: user.storeId,
-          tokens
+          tokens: {
+            ...tokens,
+            ...(offlineCapabilityToken && { offlineCapabilityToken }),
+          },
         }
       });
 
     } catch (error) {
-      logger.error('Login error:', error);
+      logger.error('[AUTH] Login error:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        email: req.body?.email
+      });
       res.status(500).json({
         success: false,
         message: 'Internal server error'
@@ -84,13 +229,19 @@ export class AuthController {
   }
 
   /**
-   * Refresh access token
+   * Refresh access token with token rotation
    */
   async refreshToken(req: Request, res: Response): Promise<void> {
     try {
+      logger.info('[AUTH] Refresh token request received', {
+        hasRefreshToken: !!req.body.refreshToken,
+        ip: req.ip
+      });
+
       const { refreshToken } = req.body;
 
       if (!refreshToken) {
+        logger.warn('[AUTH] Refresh token missing in request');
         res.status(400).json({
           success: false,
           message: 'Refresh token is required'
@@ -98,43 +249,65 @@ export class AuthController {
         return;
       }
 
-      // Verify refresh token
-      const payload = authService.verifyRefreshToken(refreshToken);
+      logger.info('[AUTH] Validating and rotating refresh token');
 
-      // Find user to ensure they still exist and are active
-      const user = await User.findById(payload.userId).populate('storeId');
-      if (!user || !user.isActive) {
-        res.status(401).json({
-          success: false,
-          message: 'User not found or inactive'
-        });
-        return;
-      }
+      // Validate and rotate refresh token (security best practice)
+      const deviceName = req.get('x-device-name');
+      const platform = req.get('x-device-platform');
+      const appVersion = req.get('x-app-version');
+      const deviceInfo = {
+        ...(deviceName && { deviceName }),
+        ...(platform && { platform }),
+        ...(appVersion && { appVersion }),
+      };
 
-      // Generate new access token
-      const newAccessToken = authService.generateAccessToken({
-        userId: user._id.toString(),
-        email: user.email,
-        role: user.role,
-        storeId: user.storeId.toString(),
-        permissions: user.permissions
+      const rotatedTokens = await authService.validateAndRotateRefreshToken(
+        refreshToken,
+        deviceInfo,
+        req.ip,
+        req.get('user-agent')
+      );
+
+      logger.info('[AUTH] Token refreshed and rotated successfully', {
+        isRemembered: rotatedTokens.isRemembered,
       });
 
-      logger.info(`Token refreshed for user ${user.email}`);
+      // Re-issue OCT on every refresh so the mobile client's offline TTL resets.
+      // DeviceId is resolved from the request header first, then the stored token's deviceInfo.
+      let offlineCapabilityToken: string | undefined;
+      const refreshDeviceId = req.get('x-device-id') ?? rotatedTokens.resolvedDeviceId;
+      if (refreshDeviceId) {
+        try {
+          offlineCapabilityToken = authService.generateOfflineCapabilityToken(
+            rotatedTokens.payload,
+            refreshDeviceId
+          );
+          logger.info('[AUTH] OCT re-issued on token refresh', { deviceId: refreshDeviceId });
+        } catch (octError) {
+          logger.warn('[AUTH] OCT re-issue skipped', {
+            error: octError instanceof Error ? octError.message : String(octError),
+          });
+        }
+      }
 
       res.status(200).json({
         success: true,
         message: 'Token refreshed successfully',
         data: {
-          accessToken: newAccessToken
-        }
+          accessToken: rotatedTokens.accessToken,
+          refreshToken: rotatedTokens.refreshToken,
+          ...(offlineCapabilityToken && { offlineCapabilityToken }),
+        },
       });
 
     } catch (error) {
-      logger.error('Token refresh error:', error);
+      logger.error('[AUTH] Token refresh error:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       res.status(401).json({
         success: false,
-        message: 'Invalid refresh token'
+        message: error instanceof Error ? error.message : 'Invalid refresh token'
       });
     }
   }
@@ -187,15 +360,27 @@ export class AuthController {
   }
 
   /**
-   * User logout (client-side token invalidation)
+   * User logout (revoke refresh tokens)
    */
   async logout(req: Request, res: Response): Promise<void> {
     try {
-      // In a stateless JWT system, logout is handled client-side
-      // by removing tokens from storage
-      // For enhanced security, you could implement a token blacklist
-      
-      logger.info(`User ${(req as any).user.email} logged out`);
+      const userId = (req as any).user.userId;
+      const { refreshToken, logoutAllDevices } = req.body;
+
+      logger.info(`User ${(req as any).user.email} logging out`, {
+        logoutAllDevices: !!logoutAllDevices
+      });
+
+      if (logoutAllDevices) {
+        // Revoke all refresh tokens for this user
+        await authService.revokeAllRefreshTokensForUser(
+          new mongoose.Types.ObjectId(userId),
+          'User logout from all devices'
+        );
+      } else if (refreshToken) {
+        // Revoke only the current refresh token
+        await authService.revokeRefreshToken(refreshToken, 'User logout');
+      }
 
       res.status(200).json({
         success: true,
@@ -208,6 +393,197 @@ export class AuthController {
         success: false,
         message: 'Internal server error'
       });
+    }
+  }
+
+  /**
+   * Request password reset
+   */
+  async forgotPassword(req: Request, res: Response): Promise<void> {
+    try {
+      const { email } = req.body;
+
+      // Find user by email
+      const user = await User.findOne({ 
+        email: email.toLowerCase(),
+        isActive: true 
+      });
+
+      if (!user) {
+        // For security, don't reveal if email exists
+        res.status(200).json({
+          success: true,
+          message: 'If your email is registered, you will receive a password reset link'
+        });
+        return;
+      }
+
+      // Generate reset token
+      const resetToken = await authService.generatePasswordResetToken(user);
+
+      // Save reset token and expiry
+      user.resetToken = resetToken;
+      user.resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
+      await user.save();
+
+      // Send reset email
+      await authService.sendPasswordResetEmail(user.email, resetToken);
+
+      logger.info(`Password reset requested for user ${user.email}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'If your email is registered, you will receive a password reset link'
+      });
+
+    } catch (error) {
+      logger.error('Password reset request error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+
+  /**
+   * Reset password with token
+   */
+  async resetPassword(req: Request, res: Response): Promise<void> {
+    try {
+      const { token, password } = req.body;
+
+      // Find user by reset token and check expiry
+      const user = await User.findOne({
+        resetToken: token,
+        resetTokenExpiry: { $gt: new Date() },
+        isActive: true
+      });
+
+      if (!user) {
+        res.status(400).json({
+          success: false,
+          message: 'Invalid or expired reset token'
+        });
+        return;
+      }
+
+      // Hash new password
+      const passwordHash = await authService.hashPassword(password);
+
+      // Update user password and clear reset token
+      user.passwordHash = passwordHash;
+      user.resetToken = undefined;
+      user.resetTokenExpiry = undefined;
+      await user.save();
+
+      logger.info(`Password reset successful for user ${user.email}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Password reset successful'
+      });
+
+    } catch (error) {
+      logger.error('Password reset error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+
+  /**
+   * Register or update a device for offline login capability.
+   *
+   * Associates the provided deviceId with the user's most recent active
+   * refresh token. Called by the mobile client after a successful online login
+   * to confirm the device is authorised for future offline sessions.
+   */
+  async registerDevice(req: Request, res: Response): Promise<void> {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
+        return;
+      }
+
+      const userId = (req as any).user.userId;
+      const { deviceId, deviceName, platform, appVersion } = req.body;
+
+      // Find the most recent active refresh token for this user and update deviceInfo
+      const activeToken = await RefreshToken.findOne({
+        userId: new mongoose.Types.ObjectId(userId),
+        isRevoked: false,
+        expiresAt: { $gt: new Date() },
+      }).sort({ createdAt: -1 });
+
+      if (!activeToken) {
+        res.status(404).json({
+          success: false,
+          message: 'No active session found. Please log in again.',
+        });
+        return;
+      }
+
+      activeToken.deviceInfo = {
+        deviceId,
+        ...(deviceName && { deviceName }),
+        ...(platform && { platform }),
+        ...(appVersion && { appVersion }),
+      };
+      await activeToken.save();
+
+      logger.info('[AUTH] Device registered', { userId, deviceId });
+
+      res.status(200).json({
+        success: true,
+        message: 'Device registered successfully',
+        data: { deviceId },
+      });
+    } catch (error) {
+      logger.error('[AUTH] Device registration error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Validate the current session server-side (PENDING_SYNC flow).
+   *
+   * The mobile client calls this after reconnecting from an offline session
+   * to confirm the account has not been revoked or deactivated while offline.
+   *
+   * Returns status: 'valid' | 'revoked'.
+   * A missing/expired access token is handled by the authenticate middleware (401).
+   */
+  async validateSession(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = (req as any).user.userId;
+
+      const user = await User.findById(userId).select('isActive role permissions storeId email');
+
+      if (!user || !user.isActive) {
+        logger.warn('[AUTH] Session validate — user not found or inactive', { userId });
+        res.status(200).json({
+          success: true,
+          data: { status: 'revoked', reason: 'Account is inactive or does not exist' },
+        });
+        return;
+      }
+
+      logger.info('[AUTH] Session validated', { userId });
+
+      res.status(200).json({
+        success: true,
+        data: {
+          status: 'valid',
+          userId,
+          role: user.role,
+          permissions: user.permissions,
+        },
+      });
+    } catch (error) {
+      logger.error('[AUTH] Session validate error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
     }
   }
 

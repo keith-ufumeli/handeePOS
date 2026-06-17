@@ -18,7 +18,7 @@ export interface IPaymentMethod {
 }
 
 export interface IOrder extends Document {
-  _id: string;
+  _id: mongoose.Types.ObjectId;
   orderNumber: string;
   storeId: mongoose.Types.ObjectId;
   cashierId: mongoose.Types.ObjectId;
@@ -196,9 +196,9 @@ OrderSchema.index({ storeId: 1, cashierId: 1 });
 OrderSchema.index({ storeId: 1, syncStatus: 1 });
 // Note: orderNumber already has unique: true which creates an index automatically
 
-// Pre-save middleware to generate order number
+// Pre-save middleware to generate order number (only when not already set, e.g. from sync)
 OrderSchema.pre('save', async function(next) {
-  if (this.isNew) {
+  if (this.isNew && !this.orderNumber) {
     const today = new Date();
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
     

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useNetInfo } from '@react-native-community/netinfo';
-import { useSyncStore } from '@/stores/syncStore';
-import SyncStatusIndicator from './SyncStatusIndicator';
+import { useSyncStore } from '../stores/syncStore';
+import SyncToast from './SyncToast';
 
 interface SyncStatusProviderProps {
   children: React.ReactNode;
@@ -9,8 +9,14 @@ interface SyncStatusProviderProps {
 
 export default function SyncStatusProvider({ children }: SyncStatusProviderProps) {
   const netInfo = useNetInfo();
-  const { setOnlineStatus } = useSyncStore();
+  const { setOnlineStatus, updatePendingCount } = useSyncStore();
 
+  // Initialize pending count on mount
+  useEffect(() => {
+    updatePendingCount();
+  }, [updatePendingCount]);
+
+  // Update online status when network changes
   useEffect(() => {
     setOnlineStatus(netInfo.isConnected ?? false);
   }, [netInfo.isConnected, setOnlineStatus]);
@@ -18,7 +24,7 @@ export default function SyncStatusProvider({ children }: SyncStatusProviderProps
   return (
     <>
       {children}
-      <SyncStatusIndicator />
+      <SyncToast />
     </>
   );
 }

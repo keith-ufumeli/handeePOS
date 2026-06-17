@@ -1,5 +1,7 @@
 import { create } from 'zustand';
-import { apiService } from '@/services/apiService';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import apiService from '../services/apiService';
 
 export interface StoreSettings {
   _id: string;
@@ -76,12 +78,12 @@ export interface TestReceipt {
   phoneNumber?: string;
   orderNumber: string;
   date: string;
-  items: Array<{
+  items: {
     name: string;
     quantity: number;
     price: number;
     total: number;
-  }>;
+  }[];
   subtotal: number;
   tax: number;
   total: number;
@@ -89,172 +91,210 @@ export interface TestReceipt {
   receiptSettings: StoreSettings['receiptSettings'];
 }
 
+function isNetworkError(error: any): boolean {
+  const msg: string = error?.message ?? '';
+  return (
+    msg.includes('Network request failed') ||
+    msg.includes('Cannot connect to server') ||
+    msg.includes('Request timed out') ||
+    msg.includes('Network Error')
+  );
+}
+
 interface SettingsStore {
   storeSettings: StoreSettings | null;
   systemInfo: SystemInfo | null;
   testReceipt: TestReceipt | null;
   loading: boolean;
+  saving: boolean;
   refreshing: boolean;
   error: string | null;
-  
+  pendingChanges: Partial<StoreSettings> | null;
+  hasPendingChanges: boolean;
+
   // Actions
   fetchStoreSettings: () => Promise<void>;
-  updateStoreSettings: (settings: Partial<StoreSettings>) => Promise<void>;
+  updateStoreSettings: (settings: Partial<StoreSettings>) => Promise<'synced' | 'queued'>;
   updateReceiptSettings: (settings: Partial<StoreSettings['receiptSettings']>) => Promise<void>;
   updateTaxSettings: (settings: Partial<StoreSettings['taxSettings']>) => Promise<void>;
   updateBusinessHours: (hours: StoreSettings['businessHours']) => Promise<void>;
+  syncPendingChanges: () => Promise<boolean>;
   fetchSystemInfo: () => Promise<void>;
   testReceiptPrinter: () => Promise<void>;
   refreshSettings: () => Promise<void>;
   clearError: () => void;
 }
 
-export const useSettingsStore = create<SettingsStore>((set, get) => ({
-  storeSettings: null,
-  systemInfo: null,
-  testReceipt: null,
-  loading: false,
-  refreshing: false,
-  error: null,
+export const useSettingsStore = create<SettingsStore>()(
+  persist(
+    (set, get) => ({
+      storeSettings: null,
+      systemInfo: null,
+      testReceipt: null,
+      loading: false,
+      saving: false,
+      refreshing: false,
+      error: null,
+      pendingChanges: null,
+      hasPendingChanges: false,
 
-  fetchStoreSettings: async () => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiService.get('/settings/store');
-      set({ 
-        storeSettings: response.data,
-        loading: false 
-      });
-    } catch (error: any) {
-      set({ 
-        error: error.message || 'Failed to fetch store settings',
-        loading: false 
-      });
+      fetchStoreSettings: async () => {
+        set({ loading: true, error: null });
+        try {
+          const response = await apiService.getStoreSettings();
+          set({ storeSettings: response.data, loading: false });
+        } catch (error: any) {
+          const currentSettings = get().storeSettings;
+          const errorMessage = error.message || 'Failed to fetch store settings';
+          if (currentSettings) {
+            console.warn('[SETTINGS_STORE] Using cached settings:', errorMessage);
+            set({ loading: false });
+          } else {
+            set({ error: errorMessage, loading: false });
+          }
+        }
+      },
+
+      updateStoreSettings: async (settings: Partial<StoreSettings>): Promise<'synced' | 'queued'> => {
+        // 1. Apply optimistically to local state immediately
+        set(state => ({
+          storeSettings: state.storeSettings
+            ? { ...state.storeSettings, ...settings }
+            : null,
+          saving: true,
+          error: null,
+        }));
+
+        try {
+          const response = await apiService.updateStoreSettings(settings);
+          set({
+            storeSettings: response.data,
+            pendingChanges: null,
+            hasPendingChanges: false,
+            saving: false,
+          });
+          return 'synced';
+        } catch (error: any) {
+          if (isNetworkError(error)) {
+            // Queue for later sync — optimistic local state is already applied
+            set(state => ({
+              pendingChanges: { ...(state.pendingChanges ?? {}), ...settings },
+              hasPendingChanges: true,
+              saving: false,
+            }));
+            return 'queued';
+          }
+          // Server-side error (auth, validation, etc.) — show error but keep local state
+          set({ saving: false, error: error.message || 'Failed to update settings' });
+          throw error;
+        }
+      },
+
+      updateReceiptSettings: async (settings: Partial<StoreSettings['receiptSettings']>) => {
+        set({ loading: true, error: null });
+        try {
+          const response = await apiService.updateReceiptSettings(settings);
+          set(state => ({
+            storeSettings: state.storeSettings
+              ? { ...state.storeSettings, receiptSettings: response.data }
+              : null,
+            loading: false,
+          }));
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to update receipt settings', loading: false });
+          throw error;
+        }
+      },
+
+      updateTaxSettings: async (settings: Partial<StoreSettings['taxSettings']>) => {
+        set({ loading: true, error: null });
+        try {
+          const response = await apiService.updateTaxSettings(settings);
+          set(state => ({
+            storeSettings: state.storeSettings
+              ? { ...state.storeSettings, taxSettings: response.data }
+              : null,
+            loading: false,
+          }));
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to update tax settings', loading: false });
+          throw error;
+        }
+      },
+
+      updateBusinessHours: async (hours: StoreSettings['businessHours']) => {
+        set({ loading: true, error: null });
+        try {
+          const response = await apiService.updateBusinessHours(hours);
+          set(state => ({
+            storeSettings: state.storeSettings
+              ? { ...state.storeSettings, businessHours: response.data }
+              : null,
+            loading: false,
+          }));
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to update business hours', loading: false });
+          throw error;
+        }
+      },
+
+      syncPendingChanges: async (): Promise<boolean> => {
+        const { pendingChanges, hasPendingChanges } = get();
+        if (!hasPendingChanges || !pendingChanges) return true;
+
+        try {
+          const response = await apiService.updateStoreSettings(pendingChanges);
+          set({
+            storeSettings: response.data,
+            pendingChanges: null,
+            hasPendingChanges: false,
+          });
+          return true;
+        } catch (error: any) {
+          console.warn('[SETTINGS_STORE] Sync failed, will retry:', error.message);
+          return false;
+        }
+      },
+
+      fetchSystemInfo: async () => {
+        try {
+          const response = await apiService.getSystemInfo();
+          set({ systemInfo: response.data });
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to fetch system information' });
+        }
+      },
+
+      testReceiptPrinter: async () => {
+        set({ loading: true, error: null });
+        try {
+          const response = await apiService.testReceiptPrinter();
+          set({ testReceipt: response.data, loading: false });
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to generate test receipt', loading: false });
+        }
+      },
+
+      refreshSettings: async () => {
+        set({ refreshing: true });
+        try {
+          await get().fetchStoreSettings();
+          set({ refreshing: false });
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to refresh settings', refreshing: false });
+        }
+      },
+
+      clearError: () => set({ error: null }),
+    }),
+    {
+      name: 'settings-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        storeSettings: state.storeSettings,
+        pendingChanges: state.pendingChanges,
+        hasPendingChanges: state.hasPendingChanges,
+      }),
     }
-  },
-
-  updateStoreSettings: async (settings: Partial<StoreSettings>) => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiService.put('/settings/store', settings);
-      set({ 
-        storeSettings: response.data,
-        loading: false 
-      });
-    } catch (error: any) {
-      set({ 
-        error: error.message || 'Failed to update store settings',
-        loading: false 
-      });
-      throw error;
-    }
-  },
-
-  updateReceiptSettings: async (settings: Partial<StoreSettings['receiptSettings']>) => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiService.put('/settings/receipt', settings);
-      const updatedSettings = response.data;
-      
-      set(state => ({
-        storeSettings: state.storeSettings ? {
-          ...state.storeSettings,
-          receiptSettings: updatedSettings
-        } : null,
-        loading: false
-      }));
-    } catch (error: any) {
-      set({ 
-        error: error.message || 'Failed to update receipt settings',
-        loading: false 
-      });
-      throw error;
-    }
-  },
-
-  updateTaxSettings: async (settings: Partial<StoreSettings['taxSettings']>) => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiService.put('/settings/tax', settings);
-      const updatedSettings = response.data;
-      
-      set(state => ({
-        storeSettings: state.storeSettings ? {
-          ...state.storeSettings,
-          taxSettings: updatedSettings
-        } : null,
-        loading: false
-      }));
-    } catch (error: any) {
-      set({ 
-        error: error.message || 'Failed to update tax settings',
-        loading: false 
-      });
-      throw error;
-    }
-  },
-
-  updateBusinessHours: async (hours: StoreSettings['businessHours']) => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiService.put('/settings/business-hours', hours);
-      const updatedHours = response.data;
-      
-      set(state => ({
-        storeSettings: state.storeSettings ? {
-          ...state.storeSettings,
-          businessHours: updatedHours
-        } : null,
-        loading: false
-      }));
-    } catch (error: any) {
-      set({ 
-        error: error.message || 'Failed to update business hours',
-        loading: false 
-      });
-      throw error;
-    }
-  },
-
-  fetchSystemInfo: async () => {
-    try {
-      const response = await apiService.get('/settings/system');
-      set({ systemInfo: response.data });
-    } catch (error: any) {
-      set({ error: error.message || 'Failed to fetch system information' });
-    }
-  },
-
-  testReceiptPrinter: async () => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiService.post('/settings/test-receipt');
-      set({ 
-        testReceipt: response.data,
-        loading: false 
-      });
-    } catch (error: any) {
-      set({ 
-        error: error.message || 'Failed to generate test receipt',
-        loading: false 
-      });
-    }
-  },
-
-  refreshSettings: async () => {
-    set({ refreshing: true });
-    try {
-      await get().fetchStoreSettings();
-      set({ refreshing: false });
-    } catch (error: any) {
-      set({ 
-        error: error.message || 'Failed to refresh settings',
-        refreshing: false 
-      });
-    }
-  },
-
-  clearError: () => {
-    set({ error: null });
-  }
-}));
+  )
+);

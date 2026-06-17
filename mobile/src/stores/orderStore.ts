@@ -1,10 +1,10 @@
 import { create } from "zustand";
-import database from "../database";
-import Order from "../database/models/Order";
-import { Q } from "@nozbe/watermelondb";
-import SyncService from "../services/syncService";
+import * as dbHelpers from "../database/db-helpers";
+import { Order } from "../database/types";
+import syncService from '../services/syncService';
 import { CartItem } from "./cartStore";
-import { API_CONFIG } from "../config/api";
+import { useAuthStore } from "./authStore";
+import { getOrCreateDeviceId } from "../utils/deviceId";
 
 export interface OrderFilters {
   status?: string;
@@ -34,9 +34,6 @@ export interface OrderState {
   clearError: () => void;
 }
 
-// Create sync service instance
-const syncService = new SyncService(API_CONFIG.BASE_URL);
-
 export const useOrderStore = create<OrderState>((set, get) => ({
   orders: [],
   isLoading: false,
@@ -47,38 +44,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const { status, dateFrom, dateTo, search } = filters;
-
-      // Build query
-      let query = database.collections.get<Order>("orders").query();
-
-      // Apply filters
-      if (status) {
-        query = query.extend(Q.where("status", status));
-      }
-
-      if (dateFrom) {
-        query = query.extend(Q.where("created_at", Q.gte(dateFrom.getTime())));
-      }
-
-      if (dateTo) {
-        query = query.extend(Q.where("created_at", Q.lte(dateTo.getTime())));
-      }
-
-      if (search) {
-        query = query.extend(
-          Q.or(
-            Q.where("order_number", Q.like(`%${search}%`)),
-            Q.where("customer_id", Q.like(`%${search}%`))
-          )
-        );
-      }
-
-      // Sort by creation date (newest first)
-      query = query.extend(Q.sortBy("created_at", "desc"));
-
-      const orders = await query.fetch();
-
+      const orders = await dbHelpers.getAllOrders(filters);
       set({
         orders,
         isLoading: false,
@@ -101,6 +67,9 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
+      const cashierId = useAuthStore.getState().user?.userId ?? 'offline';
+      const deviceId = await getOrCreateDeviceId();
+
       // Calculate totals
       const subtotal = cartItems.reduce((sum, item) => sum + item.subtotal, 0);
       const discountAmount = cartItems.reduce(
@@ -113,50 +82,46 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       }, 0);
       const total = subtotal - discountAmount + taxAmount;
 
-      // Generate order number
       const orderNumber = `ORD-${Date.now()}`;
+      const syncPayload = {
+        orderNumber,
+        cashierId,
+        customerId,
+        items: cartItems,
+        subtotal,
+        taxAmount,
+        discountAmount,
+        total,
+        payments: paymentMethods,
+        status: "completed",
+        customNote,
+        deviceId,
+      };
 
-      let newOrder: Order;
-
-      await database.write(async () => {
-        newOrder = await database.collections
-          .get<Order>("orders")
-          .create((record) => {
-            record.orderNumber = orderNumber;
-            record.cashierId = "current_user"; // TODO: Get from auth store
-            record.customerId = customerId;
-            record.orderItems = cartItems;
-            record.subtotal = subtotal;
-            record.taxAmount = taxAmount;
-            record.discountAmount = discountAmount;
-            record.total = total;
-            record.paymentMethods = paymentMethods;
-            record.status = "completed";
-            record.customNote = customNote;
-            record.syncStatusValue = "pending";
-          });
-
-        // Add to sync queue
-        await syncService.addToSyncQueue("create", "orders", newOrder.id, {
+      // Single transaction: order insert + stock decrement + sync queue entry
+      const newOrder = await dbHelpers.createOrderWithStockAndSyncQueue(
+        {
           orderNumber,
-          cashierId: "current_user",
+          cashierId,
           customerId,
-          items: cartItems,
+          items: JSON.stringify(cartItems),
           subtotal,
           taxAmount,
           discountAmount,
           total,
-          payments: paymentMethods,
+          payments: JSON.stringify(paymentMethods),
           status: "completed",
           customNote,
-        });
-      });
+        },
+        cartItems.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+        syncPayload
+      );
 
       // Reload orders
       await get().loadOrders(get().filters);
 
       set({ isLoading: false });
-      return newOrder!;
+      return newOrder;
     } catch (error) {
       set({
         error:
@@ -171,20 +136,11 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      await database.write(async () => {
-        const order = await database.collections
-          .get<Order>("orders")
-          .find(orderId);
+      await dbHelpers.updateOrder(orderId, { status });
 
-        await order.update((record) => {
-          record.status = status;
-          record.syncStatusValue = "pending";
-        });
-
-        // Add to sync queue
-        await syncService.addToSyncQueue("update", "orders", orderId, {
-          status,
-        });
+      // Add to sync queue
+      await syncService.addToSyncQueue("update", "orders", orderId, {
+        status,
       });
 
       // Reload orders
@@ -202,12 +158,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
 
   getOrderById: async (orderId: string) => {
     try {
-      const orders = await database.collections
-        .get<Order>("orders")
-        .query(Q.where("id", orderId))
-        .fetch();
-
-      return orders.length > 0 ? orders[0] : null;
+      return await dbHelpers.getOrderById(orderId);
     } catch (error) {
       console.error("Error getting order:", error);
       return null;

@@ -2,16 +2,75 @@ import { Router } from 'express';
 import { authLimiter } from '@/middleware/rateLimiter';
 import { authenticate } from '@/middleware/auth';
 import authController from '@/controllers/authController';
-import { 
-  validateLogin, 
-  validateRefreshToken, 
-  validateChangePassword 
+import {
+  validateLogin,
+  validateRegister,
+  validateRefreshToken,
+  validateChangePassword,
+  validateForgotPassword,
+  validateResetPassword,
+  validateDeviceRegister,
 } from '@/middleware/validation';
 
 const router = Router();
 
 // Apply authentication rate limiting
 router.use(authLimiter);
+
+/**
+ * @swagger
+ * /api/auth/register:
+ *   post:
+ *     summary: User registration
+ *     description: Register a new user account
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fullName
+ *               - email
+ *               - password
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *                 description: User's full name
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User's email address
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 description: User's password
+ *     responses:
+ *       201:
+ *         description: Registration successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ *                     tokens:
+ *                       $ref: '#/components/schemas/AuthTokens'
+ *       400:
+ *         description: Validation error or email already registered
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/register', validateRegister, authController.register);
 
 /**
  * @swagger
@@ -165,5 +224,150 @@ router.get('/me', authenticate, authController.getProfile);
  *         description: Internal server error
  */
 router.post('/change-password', authenticate, validateChangePassword, authController.changePassword);
+
+/**
+ * @swagger
+ * /api/auth/forgot-password:
+ *   post:
+ *     summary: Request password reset
+ *     description: Send password reset email to user
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Reset email sent (if email exists)
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/forgot-password', validateForgotPassword, authController.forgotPassword);
+
+/**
+ * @swagger
+ * /api/auth/reset-password:
+ *   post:
+ *     summary: Reset password
+ *     description: Reset password using token from email
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - password
+ *             properties:
+ *               token:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *                 format: password
+ *     responses:
+ *       200:
+ *         description: Password reset successful
+ *       400:
+ *         description: Invalid or expired token
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/reset-password', validateResetPassword, authController.resetPassword);
+
+/**
+ * @swagger
+ * /api/auth/device/register:
+ *   post:
+ *     summary: Register device for offline login
+ *     description: >
+ *       Associates a deviceId with the user's active session, enabling offline
+ *       login capability on that device. Must be called after a successful
+ *       online login. Requires a valid access token.
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - deviceId
+ *             properties:
+ *               deviceId:
+ *                 type: string
+ *                 maxLength: 128
+ *               deviceName:
+ *                 type: string
+ *                 maxLength: 100
+ *               platform:
+ *                 type: string
+ *                 enum: [ios, android, web]
+ *               appVersion:
+ *                 type: string
+ *                 maxLength: 20
+ *     responses:
+ *       200:
+ *         description: Device registered successfully
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: No active session found
+ */
+router.post('/device/register', authenticate, validateDeviceRegister, authController.registerDevice);
+
+/**
+ * @swagger
+ * /api/auth/session/validate:
+ *   get:
+ *     summary: Validate current session (PENDING_SYNC)
+ *     description: >
+ *       Called by the mobile client after reconnecting from an offline session.
+ *       Confirms the account is still active and not revoked server-side.
+ *       Returns status: 'valid' | 'revoked'.
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Session status returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       enum: [valid, revoked]
+ *                     userId:
+ *                       type: string
+ *                     role:
+ *                       type: string
+ *                     permissions:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *       401:
+ *         description: Unauthorized (expired or invalid access token)
+ */
+router.get('/session/validate', authenticate, authController.validateSession);
 
 export default router;

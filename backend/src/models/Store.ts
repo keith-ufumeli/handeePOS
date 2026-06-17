@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IStore extends Document {
-  _id: string;
+  _id: mongoose.Types.ObjectId;
   name: string;
   address: {
     street: string;

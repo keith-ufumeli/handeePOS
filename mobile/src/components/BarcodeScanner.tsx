@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
 
 interface BarcodeScannerProps {
   onBarcodeScanned: (barcode: string) => void;
@@ -14,6 +16,9 @@ export default function BarcodeScanner({
   onClose, 
   title = "Scan Barcode" 
 }: BarcodeScannerProps) {
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [flashOn, setFlashOn] = useState(false);
@@ -55,7 +60,7 @@ export default function BarcodeScanner({
     return (
       <View style={styles.container}>
         <View style={styles.permissionContainer}>
-          <Ionicons name="camera-outline" size={64} color="#666" />
+          <Ionicons name="camera-outline" size={64} color={theme.gray500} />
           <Text style={styles.permissionText}>Camera permission is required</Text>
           <Text style={styles.permissionSubtext}>
             Please enable camera access in your device settings to scan barcodes.
@@ -73,7 +78,7 @@ export default function BarcodeScanner({
       <View style={styles.header}>
         <Text style={styles.title}>{title}</Text>
         <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-          <Ionicons name="close" size={24} color="#fff" />
+          <Ionicons name="close" size={24} color={theme.white} />
         </TouchableOpacity>
       </View>
 
@@ -98,7 +103,7 @@ export default function BarcodeScanner({
             
             {scanned && (
               <View style={styles.scannedOverlay}>
-                <Ionicons name="checkmark-circle" size={64} color="#4CAF50" />
+                <Ionicons name="checkmark-circle" size={64} color={theme.success} />
                 <Text style={styles.scannedText}>Barcode scanned!</Text>
               </View>
             )}
@@ -117,7 +122,7 @@ export default function BarcodeScanner({
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.controlButton} onPress={toggleCameraType}>
-          <Ionicons name="camera-reverse" size={24} color="#fff" />
+          <Ionicons name="camera-reverse" size={24} color={theme.white} />
           <Text style={styles.controlText}>Flip</Text>
         </TouchableOpacity>
       </View>
@@ -131,7 +136,8 @@ export default function BarcodeScanner({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: typeof Colors.light) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
@@ -148,13 +154,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#fff',
+    color: theme.white,
   },
   closeButton: {
     padding: 8,
   },
   closeButtonText: {
-    color: '#fff',
+    color: theme.white,
     fontSize: 16,
     fontWeight: '500',
   },
@@ -180,7 +186,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 20,
     height: 20,
-    borderColor: '#4CAF50',
+    borderColor: theme.success,
     borderWidth: 3,
   },
   topLeft: {
@@ -218,7 +224,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   scannedText: {
-    color: '#4CAF50',
+    color: theme.success,
     fontSize: 18,
     fontWeight: '600',
     marginTop: 10,
@@ -234,7 +240,7 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   controlText: {
-    color: '#fff',
+    color: theme.white,
     fontSize: 12,
     marginTop: 5,
   },
@@ -244,7 +250,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
   },
   instructionText: {
-    color: '#fff',
+    color: theme.white,
     fontSize: 14,
     textAlign: 'center',
     opacity: 0.8,
@@ -256,17 +262,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   permissionText: {
-    color: '#fff',
+    color: theme.white,
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
     marginTop: 20,
   },
   permissionSubtext: {
-    color: '#ccc',
+    color: theme.gray300,
     fontSize: 14,
     textAlign: 'center',
     marginTop: 10,
     lineHeight: 20,
   },
-});
+  });
+}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,75 @@ import {
   TextInput,
   Alert,
   RefreshControl,
-  ActivityIndicator
+  ActivityIndicator,
+  Modal,
+  FlatList,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
+
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useSettingsStore } from '@/stores/settingsStore';
-import { useAuthStore } from '@/stores/authStore';
+import { Colors } from '../../constants/theme';
+import { useAppColorScheme } from '../../hooks/use-app-color-scheme';
+import { useSettingsStore } from '../../src/stores/settingsStore';
+import { useThemeStore } from '../../src/stores/themeStore';
+import { useAuthStore } from '../../src/stores/authStore';
+import NetInfo from '@react-native-community/netinfo';
+
+// ─── Picker options ──────────────────────────────────────────────────────────
+
+const CURRENCIES = [
+  { value: 'USD', label: 'USD – US Dollar' },
+  { value: 'EUR', label: 'EUR – Euro' },
+  { value: 'GBP', label: 'GBP – British Pound' },
+  { value: 'ZAR', label: 'ZAR – South African Rand' },
+  { value: 'KES', label: 'KES – Kenyan Shilling' },
+  { value: 'NGN', label: 'NGN – Nigerian Naira' },
+  { value: 'GHS', label: 'GHS – Ghanaian Cedi' },
+  { value: 'UGX', label: 'UGX – Ugandan Shilling' },
+  { value: 'TZS', label: 'TZS – Tanzanian Shilling' },
+  { value: 'AUD', label: 'AUD – Australian Dollar' },
+  { value: 'CAD', label: 'CAD – Canadian Dollar' },
+  { value: 'JPY', label: 'JPY – Japanese Yen' },
+  { value: 'CNY', label: 'CNY – Chinese Yuan' },
+  { value: 'INR', label: 'INR – Indian Rupee' },
+  { value: 'BRL', label: 'BRL – Brazilian Real' },
+];
+
+const TIMEZONES = [
+  { value: 'UTC', label: 'UTC' },
+  { value: 'America/New_York', label: 'America/New_York (EST/EDT)' },
+  { value: 'America/Chicago', label: 'America/Chicago (CST/CDT)' },
+  { value: 'America/Denver', label: 'America/Denver (MST/MDT)' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (PST/PDT)' },
+  { value: 'America/Sao_Paulo', label: 'America/Sao_Paulo' },
+  { value: 'Europe/London', label: 'Europe/London (GMT/BST)' },
+  { value: 'Europe/Paris', label: 'Europe/Paris (CET/CEST)' },
+  { value: 'Europe/Berlin', label: 'Europe/Berlin (CET/CEST)' },
+  { value: 'Africa/Johannesburg', label: 'Africa/Johannesburg (SAST)' },
+  { value: 'Africa/Nairobi', label: 'Africa/Nairobi (EAT)' },
+  { value: 'Africa/Lagos', label: 'Africa/Lagos (WAT)' },
+  { value: 'Africa/Accra', label: 'Africa/Accra (GMT)' },
+  { value: 'Asia/Dubai', label: 'Asia/Dubai (GST)' },
+  { value: 'Asia/Kolkata', label: 'Asia/Kolkata (IST)' },
+  { value: 'Asia/Singapore', label: 'Asia/Singapore (SGT)' },
+  { value: 'Asia/Tokyo', label: 'Asia/Tokyo (JST)' },
+  { value: 'Australia/Sydney', label: 'Australia/Sydney (AEST/AEDT)' },
+];
+
+const PAPER_SIZES = [
+  { value: '58mm', label: '58mm (Small receipt)' },
+  { value: '80mm', label: '80mm (Standard receipt)' },
+  { value: 'A4', label: 'A4 (Full page)' },
+];
+
+const FONT_SIZES = [
+  { value: 'small', label: 'Small' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'large', label: 'Large' },
+];
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface StoreSettings {
   _id: string;
@@ -65,36 +128,164 @@ interface StoreSettings {
   };
 }
 
+// ─── PickerModal ─────────────────────────────────────────────────────────────
+
+interface PickerModalProps {
+  visible: boolean;
+  title: string;
+  options: { value: string; label: string }[];
+  selected: string;
+  onSelect: (value: string) => void;
+  onClose: () => void;
+}
+
+function PickerModal({ visible, title, options, selected, onSelect, onClose }: PickerModalProps) {
+  const colorScheme = useAppColorScheme();
+  const theme = Colors[colorScheme];
+  return (
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
+      <TouchableOpacity style={pickerStyles.overlay} activeOpacity={1} onPress={onClose} />
+      <SafeAreaView style={[pickerStyles.sheet, { backgroundColor: theme.cardBg }]}>
+        <View style={[pickerStyles.handle, { backgroundColor: theme.gray300 }]} />
+        <View style={pickerStyles.sheetHeader}>
+          <Text style={[pickerStyles.sheetTitle, { color: theme.text }]}>{title}</Text>
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close" size={22} color={theme.gray500} />
+          </TouchableOpacity>
+        </View>
+        <FlatList
+          data={options}
+          keyExtractor={(item) => item.value}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={pickerStyles.option}
+              onPress={() => { onSelect(item.value); onClose(); }}
+            >
+              <Text style={[pickerStyles.optionText, { color: theme.gray700 }, item.value === selected && { color: theme.accent, fontWeight: '600' }]}>
+                {item.label}
+              </Text>
+              {item.value === selected && (
+                <Ionicons name="checkmark" size={20} color={theme.accent} />
+              )}
+            </TouchableOpacity>
+          )}
+          ItemSeparatorComponent={() => <View style={[pickerStyles.separator, { backgroundColor: theme.border }]} />}
+          style={pickerStyles.list}
+        />
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+const pickerStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  sheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '60%',
+    paddingBottom: 16,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  list: { paddingHorizontal: 4 },
+  option: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  optionText: {
+    fontSize: 16,
+  },
+  separator: {
+    height: 1,
+    marginHorizontal: 20,
+  },
+});
+
+// ─── Settings Screen ──────────────────────────────────────────────────────────
+
 export default function SettingsScreen() {
-  const router = useRouter();
+  const colorScheme = useAppColorScheme();
+  const theme = Colors[colorScheme];
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { user } = useAuthStore();
   const {
     storeSettings,
     loading,
+    saving,
     refreshing,
+    hasPendingChanges,
     fetchStoreSettings,
     updateStoreSettings,
-    updateReceiptSettings,
-    updateTaxSettings,
-    updateBusinessHours,
-    refreshSettings
+    syncPendingChanges,
+    refreshSettings,
   } = useSettingsStore();
 
-  const [activeSection, setActiveSection] = useState<'general' | 'receipt' | 'tax' | 'hours' | 'features'>('general');
+  const { themePreference, setThemePreference } = useThemeStore();
+
+  const [activeSection, setActiveSection] = useState<'general' | 'receipt' | 'tax' | 'hours' | 'features' | 'appearance'>('general');
   const [isEditing, setIsEditing] = useState(false);
   const [editedSettings, setEditedSettings] = useState<Partial<StoreSettings>>({});
 
+  // Picker modal state
+  const [picker, setPicker] = useState<{
+    type: 'currency' | 'timezone' | 'paperSize' | 'fontSize' | null;
+  }>({ type: null });
+
   useEffect(() => {
     fetchStoreSettings();
-  }, []);
+  }, [fetchStoreSettings]);
+
+  // Auto-sync pending changes when network becomes available
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      if (state.isConnected && hasPendingChanges) {
+        syncPendingChanges();
+      }
+    });
+    return unsubscribe;
+  }, [hasPendingChanges, syncPendingChanges]);
 
   const handleSave = async () => {
     try {
-      await updateStoreSettings(editedSettings);
+      const result = await updateStoreSettings(editedSettings);
       setIsEditing(false);
       setEditedSettings({});
-      Alert.alert('Success', 'Settings updated successfully');
-    } catch (error) {
+      if (result === 'queued') {
+        Alert.alert('Saved Locally', 'Changes saved on this device and will sync when you reconnect.');
+      } else {
+        Alert.alert('Success', 'Settings updated successfully');
+      }
+    } catch {
       Alert.alert('Error', 'Failed to update settings');
     }
   };
@@ -105,20 +296,17 @@ export default function SettingsScreen() {
   };
 
   const handleFieldChange = (field: string, value: any) => {
-    setEditedSettings(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setEditedSettings(prev => ({ ...prev, [field]: value }));
   };
 
   const handleReceiptFieldChange = (field: string, value: any) => {
     setEditedSettings(prev => ({
       ...prev,
       receiptSettings: {
-        ...prev.receiptSettings,
         ...storeSettings?.receiptSettings,
-        [field]: value
-      }
+        ...prev.receiptSettings,
+        [field]: value,
+      } as StoreSettings['receiptSettings'],
     }));
   };
 
@@ -126,29 +314,63 @@ export default function SettingsScreen() {
     setEditedSettings(prev => ({
       ...prev,
       taxSettings: {
-        ...prev.taxSettings,
         ...storeSettings?.taxSettings,
-        [field]: value
-      }
+        ...prev.taxSettings,
+        [field]: value,
+      } as StoreSettings['taxSettings'],
     }));
   };
 
+  // ── Picker helpers ────────────────────────────────────────────────────────
+
+  const currentValue = (field: 'currency' | 'timezone') => {
+    const merged = { ...storeSettings, ...editedSettings };
+    return (merged as any)[field] ?? '';
+  };
+  const currentReceiptValue = (field: 'paperSize' | 'fontSize') => {
+    const merged = { ...storeSettings?.receiptSettings, ...editedSettings.receiptSettings };
+    return (merged as any)[field] ?? '';
+  };
+
+  const PickerRow = ({
+    label,
+    value,
+    pickerType,
+  }: {
+    label: string;
+    value: string;
+    pickerType: 'currency' | 'timezone' | 'paperSize' | 'fontSize';
+  }) => (
+    <View style={styles.inputGroup}>
+      <Text style={styles.label}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.pickerContainer, !isEditing && styles.pickerDisabled]}
+        onPress={() => isEditing && setPicker({ type: pickerType })}
+        activeOpacity={isEditing ? 0.7 : 1}
+      >
+        <Text style={[styles.pickerText, !value && { color: theme.gray400 }]}>{value || '—'}</Text>
+        {isEditing && <Ionicons name="chevron-down" size={20} color="#6B7280" />}
+      </TouchableOpacity>
+    </View>
+  );
+
+  // ── Section renderers ─────────────────────────────────────────────────────
+
   const renderGeneralSettings = () => {
     if (!storeSettings) return null;
-
     const settings = { ...storeSettings, ...editedSettings };
 
     return (
-      <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.sectionContent}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Store Information</Text>
-          
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Store Name</Text>
             <TextInput
               style={styles.input}
               value={settings.name}
-              onChangeText={(value) => handleFieldChange('name', value)}
+              onChangeText={(v) => handleFieldChange('name', v)}
               editable={isEditing}
               placeholder="Enter store name"
             />
@@ -159,7 +381,7 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.input}
               value={settings.phoneNumber || ''}
-              onChangeText={(value) => handleFieldChange('phoneNumber', value)}
+              onChangeText={(v) => handleFieldChange('phoneNumber', v)}
               editable={isEditing}
               placeholder="Enter phone number"
               keyboardType="phone-pad"
@@ -171,7 +393,7 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.input}
               value={settings.email || ''}
-              onChangeText={(value) => handleFieldChange('email', value)}
+              onChangeText={(v) => handleFieldChange('email', v)}
               editable={isEditing}
               placeholder="Enter email address"
               keyboardType="email-address"
@@ -179,32 +401,28 @@ export default function SettingsScreen() {
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Currency</Text>
-            <View style={styles.pickerContainer}>
-              <Text style={styles.pickerText}>{settings.currency}</Text>
-              <Ionicons name="chevron-down" size={20} color="#6B7280" />
-            </View>
-          </View>
+          <PickerRow
+            label="Currency"
+            value={currentValue('currency')}
+            pickerType="currency"
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Timezone</Text>
-            <View style={styles.pickerContainer}>
-              <Text style={styles.pickerText}>{settings.timezone}</Text>
-              <Ionicons name="chevron-down" size={20} color="#6B7280" />
-            </View>
-          </View>
+          <PickerRow
+            label="Timezone"
+            value={currentValue('timezone')}
+            pickerType="timezone"
+          />
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Address</Text>
-          
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Street Address</Text>
             <TextInput
               style={styles.input}
               value={settings.address.street}
-              onChangeText={(value) => handleFieldChange('address', { ...settings.address, street: value })}
+              onChangeText={(v) => handleFieldChange('address', { ...settings.address, street: v })}
               editable={isEditing}
               placeholder="Enter street address"
             />
@@ -216,7 +434,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={styles.input}
                 value={settings.address.city}
-                onChangeText={(value) => handleFieldChange('address', { ...settings.address, city: value })}
+                onChangeText={(v) => handleFieldChange('address', { ...settings.address, city: v })}
                 editable={isEditing}
                 placeholder="City"
               />
@@ -226,7 +444,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={styles.input}
                 value={settings.address.postalCode}
-                onChangeText={(value) => handleFieldChange('address', { ...settings.address, postalCode: value })}
+                onChangeText={(v) => handleFieldChange('address', { ...settings.address, postalCode: v })}
                 editable={isEditing}
                 placeholder="Postal code"
               />
@@ -238,33 +456,31 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.input}
               value={settings.address.country}
-              onChangeText={(value) => handleFieldChange('address', { ...settings.address, country: value })}
+              onChangeText={(v) => handleFieldChange('address', { ...settings.address, country: v })}
               editable={isEditing}
               placeholder="Country"
             />
           </View>
         </View>
-      </ScrollView>
+      </View>
     );
   };
 
   const renderReceiptSettings = () => {
     if (!storeSettings) return null;
-
-    const settings = { ...storeSettings, ...editedSettings };
-    const receiptSettings = settings.receiptSettings || storeSettings.receiptSettings;
+    const receiptSettings = { ...storeSettings.receiptSettings, ...editedSettings.receiptSettings };
 
     return (
-      <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.sectionContent}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Receipt Header & Footer</Text>
-          
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Header Text</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={receiptSettings.headerText}
-              onChangeText={(value) => handleReceiptFieldChange('headerText', value)}
+              onChangeText={(v) => handleReceiptFieldChange('headerText', v)}
               editable={isEditing}
               placeholder="Enter header text"
               multiline
@@ -277,7 +493,7 @@ export default function SettingsScreen() {
             <TextInput
               style={[styles.input, styles.textArea]}
               value={receiptSettings.footerText}
-              onChangeText={(value) => handleReceiptFieldChange('footerText', value)}
+              onChangeText={(v) => handleReceiptFieldChange('footerText', v)}
               editable={isEditing}
               placeholder="Enter footer text"
               multiline
@@ -289,7 +505,7 @@ export default function SettingsScreen() {
             <Text style={styles.label}>Show Logo</Text>
             <Switch
               value={receiptSettings.showLogo}
-              onValueChange={(value) => handleReceiptFieldChange('showLogo', value)}
+              onValueChange={(v) => handleReceiptFieldChange('showLogo', v)}
               disabled={!isEditing}
             />
           </View>
@@ -298,7 +514,7 @@ export default function SettingsScreen() {
             <Text style={styles.label}>Show Tax Breakdown</Text>
             <Switch
               value={receiptSettings.showTaxBreakdown}
-              onValueChange={(value) => handleReceiptFieldChange('showTaxBreakdown', value)}
+              onValueChange={(v) => handleReceiptFieldChange('showTaxBreakdown', v)}
               disabled={!isEditing}
             />
           </View>
@@ -307,7 +523,7 @@ export default function SettingsScreen() {
             <Text style={styles.label}>Show Loyalty Points</Text>
             <Switch
               value={receiptSettings.showLoyaltyPoints}
-              onValueChange={(value) => handleReceiptFieldChange('showLoyaltyPoints', value)}
+              onValueChange={(v) => handleReceiptFieldChange('showLoyaltyPoints', v)}
               disabled={!isEditing}
             />
           </View>
@@ -316,7 +532,7 @@ export default function SettingsScreen() {
             <Text style={styles.label}>Show QR Code</Text>
             <Switch
               value={receiptSettings.showQRCode}
-              onValueChange={(value) => handleReceiptFieldChange('showQRCode', value)}
+              onValueChange={(v) => handleReceiptFieldChange('showQRCode', v)}
               disabled={!isEditing}
             />
           </View>
@@ -324,44 +540,38 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Receipt Format</Text>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Paper Size</Text>
-            <View style={styles.pickerContainer}>
-              <Text style={styles.pickerText}>{receiptSettings.paperSize}</Text>
-              <Ionicons name="chevron-down" size={20} color="#6B7280" />
-            </View>
-          </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Font Size</Text>
-            <View style={styles.pickerContainer}>
-              <Text style={styles.pickerText}>{receiptSettings.fontSize}</Text>
-              <Ionicons name="chevron-down" size={20} color="#6B7280" />
-            </View>
-          </View>
+          <PickerRow
+            label="Paper Size"
+            value={currentReceiptValue('paperSize')}
+            pickerType="paperSize"
+          />
+
+          <PickerRow
+            label="Font Size"
+            value={currentReceiptValue('fontSize')}
+            pickerType="fontSize"
+          />
         </View>
-      </ScrollView>
+      </View>
     );
   };
 
   const renderTaxSettings = () => {
     if (!storeSettings) return null;
-
-    const settings = { ...storeSettings, ...editedSettings };
-    const taxSettings = settings.taxSettings || storeSettings.taxSettings;
+    const taxSettings = { ...storeSettings.taxSettings, ...editedSettings.taxSettings };
 
     return (
-      <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.sectionContent}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Tax Configuration</Text>
-          
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Default Tax Rate (%)</Text>
             <TextInput
               style={styles.input}
               value={taxSettings.defaultTaxRate.toString()}
-              onChangeText={(value) => handleTaxFieldChange('defaultTaxRate', parseFloat(value) || 0)}
+              onChangeText={(v) => handleTaxFieldChange('defaultTaxRate', parseFloat(v) || 0)}
               editable={isEditing}
               placeholder="0"
               keyboardType="numeric"
@@ -373,7 +583,7 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.input}
               value={taxSettings.taxName}
-              onChangeText={(value) => handleTaxFieldChange('taxName', value)}
+              onChangeText={(v) => handleTaxFieldChange('taxName', v)}
               editable={isEditing}
               placeholder="e.g., VAT, Sales Tax"
             />
@@ -384,7 +594,7 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.input}
               value={taxSettings.taxNumber || ''}
-              onChangeText={(value) => handleTaxFieldChange('taxNumber', value)}
+              onChangeText={(v) => handleTaxFieldChange('taxNumber', v)}
               editable={isEditing}
               placeholder="Enter tax registration number"
             />
@@ -394,7 +604,7 @@ export default function SettingsScreen() {
             <Text style={styles.label}>Tax Inclusive Pricing</Text>
             <Switch
               value={taxSettings.taxInclusive}
-              onValueChange={(value) => handleTaxFieldChange('taxInclusive', value)}
+              onValueChange={(v) => handleTaxFieldChange('taxInclusive', v)}
               disabled={!isEditing}
             />
           </View>
@@ -403,28 +613,26 @@ export default function SettingsScreen() {
             <Text style={styles.label}>Show Tax on Receipt</Text>
             <Switch
               value={taxSettings.showTaxOnReceipt}
-              onValueChange={(value) => handleTaxFieldChange('showTaxOnReceipt', value)}
+              onValueChange={(v) => handleTaxFieldChange('showTaxOnReceipt', v)}
               disabled={!isEditing}
             />
           </View>
         </View>
-      </ScrollView>
+      </View>
     );
   };
 
   const renderBusinessHours = () => {
     if (!storeSettings) return null;
-
     const settings = { ...storeSettings, ...editedSettings };
-    const businessHours = settings.businessHours || storeSettings.businessHours;
-
+    const businessHours = settings.businessHours || storeSettings.businessHours || {};
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
     return (
-      <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.sectionContent}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Business Hours</Text>
-          
+
           {days.map((day) => {
             const dayHours = businessHours[day] || { isOpen: false, openTime: '09:00', closeTime: '17:00' };
             return (
@@ -433,15 +641,14 @@ export default function SettingsScreen() {
                   <Text style={styles.dayName}>{day.charAt(0).toUpperCase() + day.slice(1)}</Text>
                   <Switch
                     value={dayHours.isOpen}
-                    onValueChange={(value) => {
-                      const newHours = { ...businessHours };
-                      newHours[day] = { ...dayHours, isOpen: value };
+                    onValueChange={(v) => {
+                      const newHours = { ...(businessHours || {}), [day]: { ...dayHours, isOpen: v } };
                       handleFieldChange('businessHours', newHours);
                     }}
                     disabled={!isEditing}
                   />
                 </View>
-                
+
                 {dayHours.isOpen && (
                   <View style={styles.timeInputs}>
                     <View style={styles.timeInput}>
@@ -449,9 +656,8 @@ export default function SettingsScreen() {
                       <TextInput
                         style={styles.timeInputField}
                         value={dayHours.openTime}
-                        onChangeText={(value) => {
-                          const newHours = { ...businessHours };
-                          newHours[day] = { ...dayHours, openTime: value };
+                        onChangeText={(v) => {
+                          const newHours = { ...(businessHours || {}), [day]: { ...dayHours, openTime: v } };
                           handleFieldChange('businessHours', newHours);
                         }}
                         editable={isEditing}
@@ -463,13 +669,38 @@ export default function SettingsScreen() {
                       <TextInput
                         style={styles.timeInputField}
                         value={dayHours.closeTime}
-                        onChangeText={(value) => {
-                          const newHours = { ...businessHours };
-                          newHours[day] = { ...dayHours, closeTime: value };
+                        onChangeText={(v) => {
+                          const newHours = { ...(businessHours || {}), [day]: { ...dayHours, closeTime: v } };
                           handleFieldChange('businessHours', newHours);
                         }}
                         editable={isEditing}
                         placeholder="17:00"
+                      />
+                    </View>
+                    <View style={styles.timeInput}>
+                      <Text style={styles.timeLabel}>Break Start</Text>
+                      <TextInput
+                        style={styles.timeInputField}
+                        value={dayHours.breakStart || ''}
+                        onChangeText={(v) => {
+                          const newHours = { ...(businessHours || {}), [day]: { ...dayHours, breakStart: v || undefined } };
+                          handleFieldChange('businessHours', newHours);
+                        }}
+                        editable={isEditing}
+                        placeholder="optional"
+                      />
+                    </View>
+                    <View style={styles.timeInput}>
+                      <Text style={styles.timeLabel}>Break End</Text>
+                      <TextInput
+                        style={styles.timeInputField}
+                        value={dayHours.breakEnd || ''}
+                        onChangeText={(v) => {
+                          const newHours = { ...(businessHours || {}), [day]: { ...dayHours, breakEnd: v || undefined } };
+                          handleFieldChange('businessHours', newHours);
+                        }}
+                        editable={isEditing}
+                        placeholder="optional"
                       />
                     </View>
                   </View>
@@ -478,84 +709,129 @@ export default function SettingsScreen() {
             );
           })}
         </View>
-      </ScrollView>
+      </View>
     );
   };
 
   const renderFeatures = () => {
     if (!storeSettings) return null;
-
     const settings = { ...storeSettings, ...editedSettings };
     const features = settings.features || storeSettings.features;
 
     return (
-      <ScrollView style={styles.sectionContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.sectionContent}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Feature Toggles</Text>
-          
-          <View style={styles.switchGroup}>
-            <View style={styles.featureInfo}>
-              <Text style={styles.label}>Loyalty Program</Text>
-              <Text style={styles.featureDescription}>Enable customer loyalty points and rewards</Text>
-            </View>
-            <Switch
-              value={features.loyaltyProgram}
-              onValueChange={(value) => handleFieldChange('features', { ...features, loyaltyProgram: value })}
-              disabled={!isEditing}
-            />
-          </View>
 
-          <View style={styles.switchGroup}>
-            <View style={styles.featureInfo}>
-              <Text style={styles.label}>Multi-Store Support</Text>
-              <Text style={styles.featureDescription}>Manage multiple store locations</Text>
+          {([
+            { key: 'loyaltyProgram', label: 'Loyalty Program', desc: 'Enable customer loyalty points and rewards' },
+            { key: 'multiStore', label: 'Multi-Store Support', desc: 'Manage multiple store locations' },
+            { key: 'advancedReports', label: 'Advanced Reports', desc: 'Access detailed analytics and insights' },
+            { key: 'inventoryTracking', label: 'Inventory Tracking', desc: 'Track stock levels and low stock alerts' },
+          ] as const).map(({ key, label, desc }) => (
+            <View key={key} style={styles.switchGroup}>
+              <View style={styles.featureInfo}>
+                <Text style={styles.label}>{label}</Text>
+                <Text style={styles.featureDescription}>{desc}</Text>
+              </View>
+              <Switch
+                value={features[key]}
+                onValueChange={(v) => handleFieldChange('features', { ...features, [key]: v })}
+                disabled={!isEditing}
+              />
             </View>
-            <Switch
-              value={features.multiStore}
-              onValueChange={(value) => handleFieldChange('features', { ...features, multiStore: value })}
-              disabled={!isEditing}
-            />
-          </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
 
-          <View style={styles.switchGroup}>
-            <View style={styles.featureInfo}>
-              <Text style={styles.label}>Advanced Reports</Text>
-              <Text style={styles.featureDescription}>Access detailed analytics and insights</Text>
-            </View>
-            <Switch
-              value={features.advancedReports}
-              onValueChange={(value) => handleFieldChange('features', { ...features, advancedReports: value })}
-              disabled={!isEditing}
-            />
-          </View>
+  // ── Picker modal selection ────────────────────────────────────────────────
 
+  const handlePickerSelect = (value: string) => {
+    switch (picker.type) {
+      case 'currency':
+        handleFieldChange('currency', value);
+        break;
+      case 'timezone':
+        handleFieldChange('timezone', value);
+        break;
+      case 'paperSize':
+        handleReceiptFieldChange('paperSize', value);
+        break;
+      case 'fontSize':
+        handleReceiptFieldChange('fontSize', value);
+        break;
+    }
+  };
+
+  const pickerConfig = (): { title: string; options: { value: string; label: string }[]; selected: string } => {
+    switch (picker.type) {
+      case 'currency':
+        return { title: 'Select Currency', options: CURRENCIES, selected: currentValue('currency') };
+      case 'timezone':
+        return { title: 'Select Timezone', options: TIMEZONES, selected: currentValue('timezone') };
+      case 'paperSize':
+        return { title: 'Select Paper Size', options: PAPER_SIZES, selected: currentReceiptValue('paperSize') };
+      case 'fontSize':
+        return { title: 'Select Font Size', options: FONT_SIZES, selected: currentReceiptValue('fontSize') };
+      default:
+        return { title: '', options: [], selected: '' };
+    }
+  };
+
+  const renderAppearanceSettings = () => {
+    return (
+      <View style={styles.sectionContent}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Appearance</Text>
           <View style={styles.switchGroup}>
             <View style={styles.featureInfo}>
-              <Text style={styles.label}>Inventory Tracking</Text>
-              <Text style={styles.featureDescription}>Track stock levels and low stock alerts</Text>
+              <Text style={styles.label}>Prefer Dark Mode</Text>
+              <Text style={styles.featureDescription}>
+                When enabled, the app will use dark mode even if your device is set to light mode. When disabled, the app
+                follows your device appearance.
+              </Text>
             </View>
             <Switch
-              value={features.inventoryTracking}
-              onValueChange={(value) => handleFieldChange('features', { ...features, inventoryTracking: value })}
-              disabled={!isEditing}
+              value={themePreference === 'dark'}
+              onValueChange={(value) => setThemePreference(value ? 'dark' : 'system')}
             />
           </View>
         </View>
-      </ScrollView>
+      </View>
     );
   };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color={theme.accent} />
         <Text style={styles.loadingText}>Loading settings...</Text>
       </View>
     );
   }
 
+  const { title: pTitle, options: pOptions, selected: pSelected } = pickerConfig();
+
   return (
     <View style={styles.container}>
+      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+
+      {/* Picker modal */}
+      {picker.type !== null && (
+        <PickerModal
+          visible
+          title={pTitle}
+          options={pOptions}
+          selected={pSelected}
+          onSelect={handlePickerSelect}
+          onClose={() => setPicker({ type: null })}
+        />
+      )}
+
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
         <View style={styles.headerActions}>
@@ -564,62 +840,48 @@ export default function SettingsScreen() {
               <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                <Text style={styles.saveButtonText}>Save</Text>
+              <TouchableOpacity
+                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                onPress={handleSave}
+                disabled={saving}
+              >
+                <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Save'}</Text>
               </TouchableOpacity>
             </>
           ) : (
             <TouchableOpacity style={styles.editButton} onPress={() => setIsEditing(true)}>
-              <Ionicons name="create-outline" size={24} color="#3B82F6" />
+              <Ionicons name="create-outline" size={24} color={theme.accent} />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
       <View style={styles.tabContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll}>
-          <TouchableOpacity
-            style={[styles.tab, activeSection === 'general' && styles.activeTab]}
-            onPress={() => setActiveSection('general')}
-          >
-            <Text style={[styles.tabText, activeSection === 'general' && styles.activeTabText]}>
-              General
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeSection === 'receipt' && styles.activeTab]}
-            onPress={() => setActiveSection('receipt')}
-          >
-            <Text style={[styles.tabText, activeSection === 'receipt' && styles.activeTabText]}>
-              Receipt
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeSection === 'tax' && styles.activeTab]}
-            onPress={() => setActiveSection('tax')}
-          >
-            <Text style={[styles.tabText, activeSection === 'tax' && styles.activeTabText]}>
-              Tax
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeSection === 'hours' && styles.activeTab]}
-            onPress={() => setActiveSection('hours')}
-          >
-            <Text style={[styles.tabText, activeSection === 'hours' && styles.activeTabText]}>
-              Hours
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeSection === 'features' && styles.activeTab]}
-            onPress={() => setActiveSection('features')}
-          >
-            <Text style={[styles.tabText, activeSection === 'features' && styles.activeTabText]}>
-              Features
-            </Text>
-          </TouchableOpacity>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabScroll}
+        >
+          {(['general', 'receipt', 'tax', 'hours', 'features', 'appearance'] as const).map((section) => (
+            <TouchableOpacity
+              key={section}
+              style={[styles.tab, activeSection === section && styles.activeTab]}
+              onPress={() => setActiveSection(section)}
+            >
+              <Text style={[styles.tabText, activeSection === section && styles.activeTabText]}>
+                {section.charAt(0).toUpperCase() + section.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       </View>
+
+      {hasPendingChanges && (
+        <View style={styles.pendingBanner}>
+          <Ionicons name="cloud-upload-outline" size={16} color="#92400E" />
+          <Text style={styles.pendingBannerText}>Changes pending sync</Text>
+        </View>
+      )}
 
       <ScrollView
         style={styles.content}
@@ -627,108 +889,128 @@ export default function SettingsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={refreshSettings}
-            colors={['#3B82F6']}
-            tintColor="#3B82F6"
+            colors={[theme.accent]}
+            tintColor={theme.accent}
           />
         }
       >
+        {/* User Profile */}
+        <View style={styles.profileSection}>
+          <View style={styles.profileCard}>
+            <View style={styles.profileHeader}>
+              <View style={styles.profileAvatar}>
+                <Ionicons name="person" size={32} color={theme.white} />
+              </View>
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{user?.fullName || 'User'}</Text>
+                <Text style={styles.profileEmail}>{user?.email || ''}</Text>
+                <Text style={styles.profileRole}>{user?.role || 'Staff'}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
         {activeSection === 'general' && renderGeneralSettings()}
         {activeSection === 'receipt' && renderReceiptSettings()}
         {activeSection === 'tax' && renderTaxSettings()}
         {activeSection === 'hours' && renderBusinessHours()}
         {activeSection === 'features' && renderFeatures()}
+        {activeSection === 'appearance' && renderAppearanceSettings()}
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  editButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-  },
-  saveButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#10B981',
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  cancelButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-  },
-  cancelButtonText: {
-    color: '#6B7280',
-    fontWeight: '600',
-  },
-  tabContainer: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  tabScroll: {
-    paddingHorizontal: 20,
-  },
-  tab: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  activeTab: {
-    borderBottomColor: '#3B82F6',
-  },
-  tabText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  activeTabText: {
-    color: '#3B82F6',
-  },
+function createStyles(theme: typeof Colors.light) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: theme.background,
+    },
+    loadingText: {
+      marginTop: 16,
+      fontSize: 16,
+      color: theme.gray500,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingTop: 60,
+      paddingBottom: 20,
+      backgroundColor: theme.cardBg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    editButton: {
+      padding: 8,
+      borderRadius: 8,
+      backgroundColor: theme.gray100,
+    },
+    saveButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: theme.primary,
+    },
+    saveButtonText: {
+      color: theme.white,
+      fontWeight: '600',
+    },
+    cancelButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: theme.gray100,
+    },
+    cancelButtonText: {
+      color: theme.gray500,
+      fontWeight: '600',
+    },
+    tabContainer: {
+      backgroundColor: theme.cardBg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    tabScroll: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+    },
+    tab: {
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderBottomWidth: 2,
+      borderBottomColor: 'transparent',
+    },
+    activeTab: {
+      borderBottomColor: theme.accent,
+    },
+    tabText: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: theme.gray500,
+    },
+    activeTabText: {
+      color: theme.accent,
+    },
   content: {
     flex: 1,
   },
@@ -736,15 +1018,12 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   section: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.cardBg,
     borderRadius: 12,
     padding: 20,
     marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
@@ -752,7 +1031,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.text,
     marginBottom: 20,
   },
   inputGroup: {
@@ -761,18 +1040,18 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#374151',
+    color: theme.gray700,
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 16,
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
+    color: theme.text,
+    backgroundColor: theme.cardBg,
   },
   textArea: {
     height: 80,
@@ -783,15 +1062,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.cardBg,
+  },
+  pickerDisabled: {
+    backgroundColor: theme.background,
   },
   pickerText: {
     fontSize: 16,
-    color: '#111827',
+    color: theme.text,
   },
   row: {
     flexDirection: 'row',
@@ -808,7 +1090,7 @@ const styles = StyleSheet.create({
   },
   featureDescription: {
     fontSize: 12,
-    color: '#6B7280',
+    color: theme.gray500,
     marginTop: 4,
   },
   dayContainer: {
@@ -823,28 +1105,97 @@ const styles = StyleSheet.create({
   dayName: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#111827',
+    color: theme.text,
   },
   timeInputs: {
     flexDirection: 'row',
-    gap: 12,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   timeInput: {
     flex: 1,
+    minWidth: 80,
   },
   timeLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: theme.gray500,
     marginBottom: 4,
   },
   timeInputField: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     fontSize: 14,
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
+    color: theme.text,
+    backgroundColor: theme.cardBg,
   },
-});
+  profileSection: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  profileCard: {
+    backgroundColor: theme.cardBg,
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profileAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: theme.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.text,
+    marginBottom: 4,
+  },
+  profileEmail: {
+    fontSize: 14,
+    color: theme.gray500,
+    marginBottom: 2,
+  },
+  profileRole: {
+    fontSize: 13,
+    color: theme.gray400,
+    textTransform: 'capitalize',
+  },
+  pendingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FCD34D',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  pendingBannerText: {
+    fontSize: 13,
+    color: '#92400E',
+    fontWeight: '500',
+    flex: 1,
+  },
+  saveButtonDisabled: {
+    backgroundColor: theme.gray300,
+  },
+  });
+}

@@ -1,348 +1,132 @@
 import { create } from 'zustand';
-import { apiService } from '@/services/apiService';
-import { useOrderStore } from './orderStore';
+import syncService from '../services/syncService';
 import { useProductStore } from './productStore';
-import { useCustomerStore } from './customerStore';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
-
-interface SyncQueueItem {
-  id: string;
-  operation: 'create' | 'update' | 'delete';
-  collection: 'orders' | 'products' | 'customers';
-  documentId: string;
-  data: any;
-  timestamp: number;
-  retryCount: number;
-}
 
 interface SyncStore {
   syncStatus: SyncStatus;
   pendingCount: number;
   lastSyncTime: string | null;
-  syncQueue: SyncQueueItem[];
   error: string | null;
   isOnline: boolean;
-  
+
   // Actions
   setOnlineStatus: (isOnline: boolean) => void;
-  addToSyncQueue: (item: Omit<SyncQueueItem, 'id' | 'timestamp' | 'retryCount'>) => void;
-  removeFromSyncQueue: (id: string) => void;
-  syncNow: () => Promise<void>;
-  syncOrders: () => Promise<void>;
-  syncProducts: () => Promise<void>;
-  syncCustomers: () => Promise<void>;
+  syncAll: () => Promise<void>;
+  updatePendingCount: () => Promise<void>;
   clearError: () => void;
-  retryFailedItems: () => Promise<void>;
 }
 
 export const useSyncStore = create<SyncStore>((set, get) => ({
   syncStatus: 'idle',
   pendingCount: 0,
   lastSyncTime: null,
-  syncQueue: [],
   error: null,
   isOnline: true,
 
   setOnlineStatus: (isOnline: boolean) => {
     set({ isOnline });
-    if (isOnline && get().syncQueue.length > 0) {
-      get().syncNow();
+    if (isOnline) {
+      // Update pending count when coming online
+      get().updatePendingCount();
+      // Auto-sync if there are pending items
+      get().syncAll();
+    } else {
+      set({ syncStatus: 'offline' });
     }
   },
 
-  addToSyncQueue: (item) => {
-    const syncItem: SyncQueueItem = {
-      ...item,
-      id: `${item.collection}_${item.documentId}_${Date.now()}`,
-      timestamp: Date.now(),
-      retryCount: 0
-    };
+  syncAll: async () => {
+    const { isOnline } = get();
 
-    set(state => ({
-      syncQueue: [...state.syncQueue, syncItem],
-      pendingCount: state.pendingCount + 1
-    }));
-  },
-
-  removeFromSyncQueue: (id: string) => {
-    set(state => ({
-      syncQueue: state.syncQueue.filter(item => item.id !== id),
-      pendingCount: Math.max(0, state.pendingCount - 1)
-    }));
-  },
-
-  syncNow: async () => {
-    const { syncQueue, isOnline } = get();
-    
     if (!isOnline) {
       set({ syncStatus: 'offline' });
       return;
     }
 
-    if (syncQueue.length === 0) {
+    // Update pending count before sync
+    await get().updatePendingCount();
+
+    const { pendingCount } = get();
+
+    // If no pending items, just update status to synced
+    if (pendingCount === 0) {
       set({ syncStatus: 'synced' });
+      // Auto-hide synced status after 2 seconds
+      setTimeout(() => {
+        if (get().syncStatus === 'synced') {
+          set({ syncStatus: 'idle' });
+        }
+      }, 2000);
       return;
     }
 
+    // Set status to syncing
     set({ syncStatus: 'syncing', error: null });
 
     try {
-      // Sync all pending items
-      await Promise.all([
-        get().syncOrders(),
-        get().syncProducts(),
-        get().syncCustomers()
-      ]);
+      console.log('[SYNC_STORE] Starting sync with', pendingCount, 'pending items');
 
-      set({ 
-        syncStatus: 'synced',
-        lastSyncTime: new Date().toISOString(),
-        pendingCount: 0
-      });
+      // Call the actual sync service (pass lastSyncTime for incremental pull)
+      const result = await syncService.syncAll(get().lastSyncTime);
+
+      if (result.success) {
+        console.log('[SYNC_STORE] Sync completed successfully');
+
+        // Reload products and categories after successful sync
+        const productStore = useProductStore.getState();
+        await productStore.loadProducts(productStore.filters);
+        await productStore.loadCategories();
+
+        set({
+          syncStatus: 'synced',
+          lastSyncTime: result.serverTimestamp ?? new Date().toISOString(),
+          pendingCount: 0,
+          error: null
+        });
+
+        // Auto-hide synced status after 2 seconds
+        setTimeout(() => {
+          if (get().syncStatus === 'synced') {
+            set({ syncStatus: 'idle' });
+          }
+        }, 2000);
+      } else {
+        console.error('[SYNC_STORE] Sync failed:', result.errors);
+        set({
+          syncStatus: 'error',
+          error: result.errors.join(', ') || 'Sync failed'
+        });
+
+        // Update pending count to reflect any items that failed
+        await get().updatePendingCount();
+      }
     } catch (error: any) {
-      set({ 
+      console.error('[SYNC_STORE] Sync error:', error);
+      set({
         syncStatus: 'error',
         error: error.message || 'Sync failed'
       });
+
+      // Update pending count
+      await get().updatePendingCount();
     }
   },
 
-  syncOrders: async () => {
-    const { syncQueue } = get();
-    const orderItems = syncQueue.filter(item => item.collection === 'orders');
-    
-    if (orderItems.length === 0) return;
-
+  updatePendingCount: async () => {
     try {
-      // Group by operation type
-      const creates = orderItems.filter(item => item.operation === 'create');
-      const updates = orderItems.filter(item => item.operation === 'update');
-      const deletes = orderItems.filter(item => item.operation === 'delete');
-
-      // Process creates
-      for (const item of creates) {
-        try {
-          await apiService.post('/orders', item.data);
-          get().removeFromSyncQueue(item.id);
-        } catch (error) {
-          console.error('Failed to sync order create:', error);
-          // Increment retry count
-          set(state => ({
-            syncQueue: state.syncQueue.map(queueItem =>
-              queueItem.id === item.id
-                ? { ...queueItem, retryCount: queueItem.retryCount + 1 }
-                : queueItem
-            )
-          }));
-        }
-      }
-
-      // Process updates
-      for (const item of updates) {
-        try {
-          await apiService.put(`/orders/${item.documentId}`, item.data);
-          get().removeFromSyncQueue(item.id);
-        } catch (error) {
-          console.error('Failed to sync order update:', error);
-          set(state => ({
-            syncQueue: state.syncQueue.map(queueItem =>
-              queueItem.id === item.id
-                ? { ...queueItem, retryCount: queueItem.retryCount + 1 }
-                : queueItem
-            )
-          }));
-        }
-      }
-
-      // Process deletes
-      for (const item of deletes) {
-        try {
-          await apiService.delete(`/orders/${item.documentId}`);
-          get().removeFromSyncQueue(item.id);
-        } catch (error) {
-          console.error('Failed to sync order delete:', error);
-          set(state => ({
-            syncQueue: state.syncQueue.map(queueItem =>
-              queueItem.id === item.id
-                ? { ...queueItem, retryCount: queueItem.retryCount + 1 }
-                : queueItem
-            )
-          }));
-        }
-      }
-
-      // Refresh local orders
-      const orderStore = useOrderStore.getState();
-      await orderStore.fetchOrders();
+      const status = await syncService.getSyncStatus();
+      set({
+        pendingCount: status.pendingCount,
+        lastSyncTime: status.lastSyncTime ? new Date(status.lastSyncTime).toISOString() : null
+      });
     } catch (error) {
-      console.error('Order sync failed:', error);
-      throw error;
-    }
-  },
-
-  syncProducts: async () => {
-    const { syncQueue } = get();
-    const productItems = syncQueue.filter(item => item.collection === 'products');
-    
-    if (productItems.length === 0) return;
-
-    try {
-      // Group by operation type
-      const creates = productItems.filter(item => item.operation === 'create');
-      const updates = productItems.filter(item => item.operation === 'update');
-      const deletes = productItems.filter(item => item.operation === 'delete');
-
-      // Process creates
-      for (const item of creates) {
-        try {
-          await apiService.post('/products', item.data);
-          get().removeFromSyncQueue(item.id);
-        } catch (error) {
-          console.error('Failed to sync product create:', error);
-          set(state => ({
-            syncQueue: state.syncQueue.map(queueItem =>
-              queueItem.id === item.id
-                ? { ...queueItem, retryCount: queueItem.retryCount + 1 }
-                : queueItem
-            )
-          }));
-        }
-      }
-
-      // Process updates
-      for (const item of updates) {
-        try {
-          await apiService.put(`/products/${item.documentId}`, item.data);
-          get().removeFromSyncQueue(item.id);
-        } catch (error) {
-          console.error('Failed to sync product update:', error);
-          set(state => ({
-            syncQueue: state.syncQueue.map(queueItem =>
-              queueItem.id === item.id
-                ? { ...queueItem, retryCount: queueItem.retryCount + 1 }
-                : queueItem
-            )
-          }));
-        }
-      }
-
-      // Process deletes
-      for (const item of deletes) {
-        try {
-          await apiService.delete(`/products/${item.documentId}`);
-          get().removeFromSyncQueue(item.id);
-        } catch (error) {
-          console.error('Failed to sync product delete:', error);
-          set(state => ({
-            syncQueue: state.syncQueue.map(queueItem =>
-              queueItem.id === item.id
-                ? { ...queueItem, retryCount: queueItem.retryCount + 1 }
-                : queueItem
-            )
-          }));
-        }
-      }
-
-      // Refresh local products
-      const productStore = useProductStore.getState();
-      await productStore.fetchProducts();
-    } catch (error) {
-      console.error('Product sync failed:', error);
-      throw error;
-    }
-  },
-
-  syncCustomers: async () => {
-    const { syncQueue } = get();
-    const customerItems = syncQueue.filter(item => item.collection === 'customers');
-    
-    if (customerItems.length === 0) return;
-
-    try {
-      // Group by operation type
-      const creates = customerItems.filter(item => item.operation === 'create');
-      const updates = customerItems.filter(item => item.operation === 'update');
-      const deletes = customerItems.filter(item => item.operation === 'delete');
-
-      // Process creates
-      for (const item of creates) {
-        try {
-          await apiService.post('/customers', item.data);
-          get().removeFromSyncQueue(item.id);
-        } catch (error) {
-          console.error('Failed to sync customer create:', error);
-          set(state => ({
-            syncQueue: state.syncQueue.map(queueItem =>
-              queueItem.id === item.id
-                ? { ...queueItem, retryCount: queueItem.retryCount + 1 }
-                : queueItem
-            )
-          }));
-        }
-      }
-
-      // Process updates
-      for (const item of updates) {
-        try {
-          await apiService.put(`/customers/${item.documentId}`, item.data);
-          get().removeFromSyncQueue(item.id);
-        } catch (error) {
-          console.error('Failed to sync customer update:', error);
-          set(state => ({
-            syncQueue: state.syncQueue.map(queueItem =>
-              queueItem.id === item.id
-                ? { ...queueItem, retryCount: queueItem.retryCount + 1 }
-                : queueItem
-            )
-          }));
-        }
-      }
-
-      // Process deletes
-      for (const item of deletes) {
-        try {
-          await apiService.delete(`/customers/${item.documentId}`);
-          get().removeFromSyncQueue(item.id);
-        } catch (error) {
-          console.error('Failed to sync customer delete:', error);
-          set(state => ({
-            syncQueue: state.syncQueue.map(queueItem =>
-              queueItem.id === item.id
-                ? { ...queueItem, retryCount: queueItem.retryCount + 1 }
-                : queueItem
-            )
-          }));
-        }
-      }
-
-      // Refresh local customers
-      const customerStore = useCustomerStore.getState();
-      await customerStore.fetchCustomers();
-    } catch (error) {
-      console.error('Customer sync failed:', error);
-      throw error;
+      console.error('[SYNC_STORE] Failed to update pending count:', error);
     }
   },
 
   clearError: () => {
-    set({ error: null });
-  },
-
-  retryFailedItems: async () => {
-    const { syncQueue } = get();
-    const failedItems = syncQueue.filter(item => item.retryCount > 0);
-    
-    if (failedItems.length === 0) return;
-
-    // Reset retry count for failed items
-    set(state => ({
-      syncQueue: state.syncQueue.map(item =>
-        item.retryCount > 0 ? { ...item, retryCount: 0 } : item
-      )
-    }));
-
-    // Retry sync
-    await get().syncNow();
+    set({ error: null, syncStatus: 'idle' });
   }
 }));

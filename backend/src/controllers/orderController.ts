@@ -2,10 +2,19 @@ import { Request, Response } from 'express';
 import Order from '@/models/Order';
 import Product from '@/models/Product';
 import Customer from '@/models/Customer';
+import InventoryAdjustment from '@/models/InventoryAdjustment';
 import { sendSuccess, sendError } from '@/utils/response';
 import logger from '@/utils/logger';
 import { TokenPayload } from '@/services/authService';
 import mongoose from 'mongoose';
+
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const idempotencyCache = new Map<string, { body: any; expiry: number }>();
+
+function getIdempotencyKey(req: Request | AuthenticatedRequest): string | undefined {
+  const key = req.get('X-Idempotency-Key') ?? (req.headers['x-idempotency-key'] as string);
+  return key && String(key).trim() ? String(key).trim() : undefined;
+}
 
 interface AuthenticatedRequest extends Omit<Request, 'user'> {
   user: TokenPayload;
@@ -16,13 +25,22 @@ export class OrderController {
    * Create a new order
    */
   static async createOrder(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const idempotencyKey = getIdempotencyKey(req);
+    if (idempotencyKey) {
+      const cached = idempotencyCache.get(idempotencyKey);
+      if (cached && cached.expiry > Date.now()) {
+        res.status(200).json(cached.body);
+        return;
+      }
+    }
+
     const session = await mongoose.startSession();
-    
+
     try {
-      await session.withTransaction(async () => {
+      const populatedOrder = await session.withTransaction(async () => {
         const storeId = req.user?.storeId;
         const cashierId = req.user?.userId;
-        const { items, customerId, customNote, payments } = req.body;
+        const { items, customerId, customNote, payments, orderNumber, subtotal, taxAmount, discountAmount, total, status, deviceId } = req.body;
 
         if (!storeId || !cashierId) {
           throw new Error('Store ID or Cashier ID not found');
@@ -33,43 +51,93 @@ export class OrderController {
           throw new Error('Order must have at least one item');
         }
 
-        // Check product availability and update stock
+        const stockAdjustments: { productId: mongoose.Types.ObjectId; previousQuantity: number; newQuantity: number; delta: number }[] = [];
+
+        // Atomic conditional decrement: only update if stockQuantity >= item.quantity to prevent negative stock under concurrency
         for (const item of items) {
-          const product = await Product.findOne({
-            _id: item.productId,
-            storeId,
-            isActive: true
-          }).session(session);
+          const updated = await Product.findOneAndUpdate(
+            {
+              _id: item.productId,
+              storeId,
+              isActive: true,
+              stockQuantity: { $gte: item.quantity },
+            },
+            { $inc: { stockQuantity: -item.quantity } },
+            { session, new: true }
+          );
 
-          if (!product) {
-            throw new Error(`Product ${item.productName} not found or inactive`);
-          }
-
-          if (product.stockQuantity < item.quantity) {
+          if (!updated) {
+            const product = await Product.findOne({ _id: item.productId, storeId }).session(session);
+            if (!product) {
+              throw new Error(`Product ${item.productName} not found or inactive`);
+            }
             throw new Error(`Insufficient stock for ${item.productName}. Available: ${product.stockQuantity}`);
           }
 
-          // Update stock
-          await Product.findByIdAndUpdate(
-            item.productId,
-            { $inc: { stockQuantity: -item.quantity } },
-            { session }
-          );
+          const newQuantity = updated.stockQuantity;
+          const previousQuantity = newQuantity + item.quantity;
+          stockAdjustments.push({
+            productId: new mongoose.Types.ObjectId(String(updated._id)),
+            previousQuantity,
+            newQuantity,
+            delta: -item.quantity,
+          });
         }
 
-        // Create order
-        const orderData = {
+        // Compute totals from items when not provided (sync payloads send them for validation)
+        const computedSubtotal = items.reduce((sum: number, i: any) => sum + (Number(i.subtotal) || 0), 0);
+        const computedTaxAmount = items.reduce((sum: number, i: any) => sum + (Number(i.tax) || 0), 0);
+        const computedDiscountAmount = items.reduce((sum: number, i: any) => sum + (Number(i.discount) || 0), 0);
+        const computedTotal = computedSubtotal + computedTaxAmount - computedDiscountAmount;
+
+        const useNum = (v: any, fallback: number): number => {
+          const n = typeof v === 'number' ? v : Number(v);
+          return !Number.isNaN(n) ? n : fallback;
+        };
+
+        // Create order – use request body totals when present (e.g. from sync), else computed
+        const orderData: any = {
           storeId,
           cashierId,
           customerId: customerId || null,
           items,
+          subtotal: useNum(subtotal, computedSubtotal),
+          taxAmount: useNum(taxAmount, computedTaxAmount),
+          discountAmount: useNum(discountAmount, computedDiscountAmount),
+          total: useNum(total, computedTotal),
           customNote,
           payments: payments || [{ method: 'cash', amount: 0 }],
-          deviceId: req.body.deviceId
+          deviceId: deviceId ?? req.body.deviceId,
+          syncStatus: 'synced',
         };
+        if (orderNumber != null && String(orderNumber).trim()) {
+          orderData.orderNumber = String(orderNumber).trim();
+        }
+        if (status != null && ['pending', 'completed', 'cancelled', 'refunded'].includes(status)) {
+          orderData.status = status;
+        }
 
         const order = new Order(orderData);
         await order.save({ session });
+
+        // Inventory adjustment log (sale)
+        for (const adj of stockAdjustments) {
+          await InventoryAdjustment.create(
+            [
+              {
+                storeId,
+                productId: adj.productId,
+                previousQuantity: adj.previousQuantity,
+                newQuantity: adj.newQuantity,
+                delta: adj.delta,
+                reason: 'sale',
+                orderId: order._id,
+                performedBy: cashierId,
+              },
+            ],
+            { session }
+          );
+        }
 
         // Update customer stats if customer is provided
         if (customerId) {
@@ -89,13 +157,29 @@ export class OrderController {
         }
 
         // Populate the order with related data
-        const populatedOrder = await Order.findById(order._id)
+        const populated = await Order.findById(order._id)
           .populate('cashierId', 'fullName email')
           .populate('customerId', 'name email phoneNumber')
-          .session(session);
+          .session(session)
+          .lean();
 
-        sendSuccess(res, populatedOrder, 'Order created successfully', 201);
+        return populated;
       });
+
+      const responseBody = {
+        success: true,
+        data: populatedOrder,
+        message: 'Order created successfully'
+      };
+
+      if (idempotencyKey) {
+        idempotencyCache.set(idempotencyKey, {
+          body: responseBody,
+          expiry: Date.now() + IDEMPOTENCY_TTL_MS
+        });
+      }
+
+      res.status(201).json(responseBody);
     } catch (error: any) {
       logger.error('Error creating order:', error);
       sendError(res, error.message || 'Failed to create order', 500);
@@ -325,13 +409,35 @@ export class OrderController {
           throw new Error('Cannot cancel completed order');
         }
 
-        // Restore stock for each item
+        const performedBy = (req as AuthenticatedRequest).user?.userId ?? 'system';
+
+        // Restore stock for each item and log adjustment
         for (const item of order.items) {
-          await Product.findByIdAndUpdate(
-            item.productId,
-            { $inc: { stockQuantity: item.quantity } },
-            { session }
-          );
+          const product = await Product.findById(item.productId).session(session);
+          if (product) {
+            const previousQuantity = product.stockQuantity;
+            const newQuantity = previousQuantity + item.quantity;
+            await Product.findByIdAndUpdate(
+              item.productId,
+              { $inc: { stockQuantity: item.quantity } },
+              { session }
+            );
+            await InventoryAdjustment.create(
+              [
+                {
+                  storeId,
+                  productId: item.productId,
+                  previousQuantity,
+                  newQuantity,
+                  delta: item.quantity,
+                  reason: 'cancellation',
+                  orderId: order._id,
+                  performedBy,
+                },
+              ],
+              { session }
+            );
+          }
         }
 
         // Update order status

@@ -8,14 +8,18 @@ import {
   Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSyncStore } from '@/stores/syncStore';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
+import { useSyncStore } from '../stores/syncStore';
 
 interface SyncStatusIndicatorProps {
   onPress?: () => void;
 }
 
 export default function SyncStatusIndicator({ onPress }: SyncStatusIndicatorProps) {
-  const { syncStatus, pendingCount, lastSyncTime, syncNow } = useSyncStore();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
+  const { syncStatus, pendingCount, lastSyncTime, syncAll } = useSyncStore();
   const [pulseAnim] = useState(new Animated.Value(1));
 
   useEffect(() => {
@@ -45,15 +49,15 @@ export default function SyncStatusIndicator({ onPress }: SyncStatusIndicatorProp
   const getStatusColor = () => {
     switch (syncStatus) {
       case 'synced':
-        return '#10B981';
+        return theme.success;
       case 'syncing':
-        return '#3B82F6';
+        return theme.accent;
       case 'error':
-        return '#EF4444';
+        return theme.error;
       case 'offline':
-        return '#6B7280';
+        return theme.gray500;
       default:
-        return '#6B7280';
+        return theme.gray500;
     }
   };
 
@@ -112,7 +116,7 @@ export default function SyncStatusIndicator({ onPress }: SyncStatusIndicatorProp
         `Status: ${getStatusText()}\nPending: ${pendingCount} items\nLast sync: ${formatLastSync()}`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Sync Now', onPress: syncNow }
+          { text: 'Sync Now', onPress: syncAll }
         ]
       );
     }
@@ -120,7 +124,7 @@ export default function SyncStatusIndicator({ onPress }: SyncStatusIndicatorProp
 
   return (
     <TouchableOpacity
-      style={[styles.container, { borderColor: getStatusColor() }]}
+      style={[styles.container, { backgroundColor: theme.cardBg, borderColor: getStatusColor() }]}
       onPress={handlePress}
       activeOpacity={0.7}
     >
@@ -136,7 +140,7 @@ export default function SyncStatusIndicator({ onPress }: SyncStatusIndicatorProp
         <Ionicons 
           name={getStatusIcon() as any} 
           size={16} 
-          color="#FFFFFF" 
+          color={theme.white} 
         />
       </Animated.View>
       
@@ -145,11 +149,11 @@ export default function SyncStatusIndicator({ onPress }: SyncStatusIndicatorProp
           {getStatusText()}
         </Text>
         {pendingCount > 0 && (
-          <Text style={styles.pendingText}>
+          <Text style={[styles.pendingText, { color: theme.gray500 }]}>
             {pendingCount} pending
           </Text>
         )}
-        <Text style={styles.lastSyncText}>
+        <Text style={[styles.lastSyncText, { color: theme.gray400 }]}>
           {formatLastSync()}
         </Text>
       </View>
@@ -158,7 +162,7 @@ export default function SyncStatusIndicator({ onPress }: SyncStatusIndicatorProp
         <Ionicons 
           name="chevron-forward" 
           size={16} 
-          color="#6B7280" 
+          color={theme.gray500} 
         />
       )}
     </TouchableOpacity>
@@ -171,7 +175,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderRadius: 8,
     marginHorizontal: 16,
@@ -202,12 +205,10 @@ const styles = StyleSheet.create({
   },
   pendingText: {
     fontSize: 12,
-    color: '#6B7280',
     marginTop: 1,
   },
   lastSyncText: {
     fontSize: 11,
-    color: '#9CA3AF',
     marginTop: 1,
   },
 });

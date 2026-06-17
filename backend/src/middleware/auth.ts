@@ -11,15 +11,42 @@ export const authenticate = (
   next: NextFunction
 ): void => {
   try {
+    logger.info('[AUTH_MIDDLEWARE] Authenticating request', {
+      path: req.path,
+      method: req.method,
+      hasAuthHeader: !!req.headers.authorization,
+      authHeaderValue: req.headers.authorization ? `${req.headers.authorization.substring(0, 20)}...` : 'missing'
+    });
+
+    if (!req.headers.authorization) {
+      logger.warn('[AUTH_MIDDLEWARE] Authorization header is missing');
+      throw new Error('Authorization header is missing');
+    }
+
     const token = authService.extractTokenFromHeader(req.headers.authorization);
+    logger.info('[AUTH_MIDDLEWARE] Token extracted', { 
+      tokenLength: token.length,
+      tokenPrefix: token.substring(0, 20) + '...'
+    });
+
     const decoded = authService.verifyAccessToken(token);
+    logger.info('[AUTH_MIDDLEWARE] Token verified, user authenticated', {
+      userId: decoded.userId,
+      email: decoded.email,
+      role: decoded.role
+    });
     
     // Attach user info to request
     (req as any).user = decoded;
     
     next();
   } catch (error) {
-    logger.error('Authentication error:', error);
+    logger.error('[AUTH_MIDDLEWARE] Authentication error:', {
+      error: error instanceof Error ? error.message : String(error),
+      path: req.path,
+      method: req.method,
+      hasAuthHeader: !!req.headers.authorization
+    });
     res.status(401).json({
       success: false,
       message: error instanceof Error ? error.message : 'Authentication failed'
